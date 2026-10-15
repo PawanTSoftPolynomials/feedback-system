@@ -136,7 +136,14 @@ async function ensureFile(name) {
 
 async function init() {
   dataDir = resolveDataDir();
-  await fs.mkdir(dataDir, { recursive: true });
+  try {
+    await fs.mkdir(dataDir, { recursive: true });
+  } catch (err) {
+    throw new Error(
+      `Cannot create or access the data directory ${dataDir} (${err.code}). ` +
+      `On Render, attach a Persistent Disk with mount path ${dataDir}; otherwise set DATA_DIR to a writable folder.`
+    );
+  }
   await applyPendingRestore();
   for (const name of COLLECTION_NAMES) {
     await ensureFile(name);

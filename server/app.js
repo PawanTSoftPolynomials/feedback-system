@@ -29,6 +29,8 @@ function createApp() {
       res.set('Cache-Control', 'no-cache');
       res.sendFile(path.join(dist, 'index.html'));
     });
+  } else {
+    console.warn('[server] client/dist not found: only the API is served. Run "npm run build" (on Render use the build command "npm install && npm run build").');
   }
 
   app.use(errorHandler);
