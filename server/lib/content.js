@@ -13,7 +13,7 @@ const activeSorted = (name) => sortedList(name).filter((item) => item.active !==
 
 function sanitizeQuestion(body) {
   const type = body.type;
-  if (!QUESTION_TYPES.includes(type)) throw new HttpError(400, 'Choose a valid question type.');
+  if (!QUESTION_TYPES.includes(type)) throw new HttpError(400, `Question type must be one of: ${QUESTION_TYPES.join(', ')}.`);
   let options = [];
   if (CHOICE_TYPES.includes(type)) {
     if (!Array.isArray(body.options)) throw new HttpError(400, 'Choice questions need a list of options.');

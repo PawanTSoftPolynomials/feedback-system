@@ -205,3 +205,7 @@ textarea.input { resize: vertical; }
 
 .page-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .page-head h1 { margin: 0; }
+
+.code-input { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; font-size: 0.85rem; line-height: 1.5; }
+.import-tools { margin-bottom: 10px; align-items: center; }
+code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.9em; background: #eceff3; padding: 1px 5px; border-radius: 4px; }

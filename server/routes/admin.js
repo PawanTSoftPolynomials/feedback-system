@@ -101,6 +101,46 @@ function orderedResource(name, sanitize, { notFound, beforeDelete, decorate = (i
 // Submissions keep a copy of each question/attribute text, so deleting one never breaks old feedback.
 orderedResource('questions', sanitizeQuestion, { notFound: 'Question not found.' });
 orderedResource('attributes', sanitizeAttribute, { notFound: 'Rating attribute not found.' });
+
+// Bulk import: accepts a JSON array of questions (or { "questions": [...] }). Every question is
+// validated before anything is saved. Questions whose text already exists are skipped.
+router.post('/questions/import', async (req, res) => {
+  const body = req.body;
+  const list = Array.isArray(body) ? body : body && Array.isArray(body.questions) ? body.questions : null;
+  if (!list) throw new HttpError(400, 'Send a JSON array of questions, or an object with a "questions" array.');
+  if (list.length === 0) throw new HttpError(400, 'The list of questions is empty.');
+  if (list.length > 200) throw new HttpError(400, 'You can import at most 200 questions at a time.');
+
+  const cleaned = list.map((q, i) => {
+    if (!q || typeof q !== 'object' || Array.isArray(q)) throw new HttpError(400, `Question ${i + 1}: must be an object like {"text": "...", "type": "short_text"}.`);
+    try {
+      return sanitizeQuestion(q);
+    } catch (err) {
+      if (err instanceof HttpError) throw new HttpError(400, `Question ${i + 1}: ${err.message}`);
+      throw err;
+    }
+  });
+
+  const result = await storage.transaction(['questions'], (d) => {
+    const existing = new Set(d.questions.map((q) => q.text.toLowerCase()));
+    let order = d.questions.reduce((max, item) => Math.max(max, item.order), -1) + 1;
+    const now = new Date().toISOString();
+    let imported = 0;
+    let skipped = 0;
+    for (const data of cleaned) {
+      const key = data.text.toLowerCase();
+      if (existing.has(key)) {
+        skipped += 1;
+        continue;
+      }
+      existing.add(key);
+      d.questions.push({ id: crypto.randomUUID(), ...data, order: order++, createdAt: now, updatedAt: now });
+      imported += 1;
+    }
+    return { imported, skipped };
+  });
+  res.status(201).json({ ...result, questions: sortedList('questions') });
+});
 orderedResource('prizes', sanitizePrize, {
   notFound: 'Prize not found.',
   beforeDelete: (id) => {

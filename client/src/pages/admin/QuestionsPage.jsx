@@ -2,6 +2,7 @@ import { useState } from 'react';
 import useOrderedList from '../../components/useOrderedList.js';
 import { Alert, Badge, Field, Loading } from '../../components/ui.jsx';
 import OrderedList from './OrderedList.jsx';
+import QuestionImport from './QuestionImport.jsx';
 
 export const QUESTION_TYPES = {
   short_text: 'Short text',
@@ -59,10 +60,24 @@ function QuestionEditor({ initial, onSave, onCancel }) {
 
 export default function QuestionsPage() {
   const list = useOrderedList('questions');
+  const [importing, setImporting] = useState(false);
+  const [notice, setNotice] = useState('');
   if (!list.items) return list.error ? <Alert>{list.error}</Alert> : <Loading />;
+
+  const onImported = (res) => {
+    list.setItems(res.questions);
+    setImporting(false);
+    setNotice(`Imported ${res.imported} question(s).${res.skipped ? ` Skipped ${res.skipped} that already existed.` : ''}`);
+  };
+
   return (
     <>
-      <h1>Feedback questions</h1>
+      <div className="page-head">
+        <h1>Feedback questions</h1>
+        {!importing && <button className="btn btn-secondary btn-sm" onClick={() => { setNotice(''); setImporting(true); }}>Import JSON</button>}
+      </div>
+      <Alert type="success">{notice}</Alert>
+      {importing && <QuestionImport onImported={onImported} onClose={() => setImporting(false)} />}
       <p className="muted">Students see active questions in this order. Old submissions keep their answers even if a question is edited or deleted.</p>
       <OrderedList
         list={list}

@@ -41,5 +41,5 @@ export default function useOrderedList(resource) {
     setItems(await adminApi.put(`/admin/${resource}/reorder`, { ids }));
   }).catch(() => reload());
 
-  return { items, error, setError, save, remove, move, reload };
+  return { items, setItems, error, setError, save, remove, move, reload };
 }

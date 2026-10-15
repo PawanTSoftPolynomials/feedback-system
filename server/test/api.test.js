@@ -224,3 +224,36 @@ test('winners page: declared winners are stored separately and can be deleted', 
   assert.equal((await call('DELETE', `/admin/winners/${remaining[0].id}`, undefined, adminToken)).status, 204);
   assert.equal((await call('GET', `/admin/winners/${remaining[0].id}`, undefined, adminToken)).status, 404);
 });
+
+test('bulk JSON import of questions', async () => {
+  const before = (await call('GET', '/admin/questions', undefined, adminToken)).body.length;
+  assert.equal((await call('POST', '/admin/questions/import', [{ text: 'X', type: 'short_text' }])).status, 401);
+  assert.equal((await call('POST', '/admin/questions/import', { nope: true }, adminToken)).status, 400);
+
+  // One invalid question rejects the whole import, naming the question.
+  const bad = await call('POST', '/admin/questions/import', [
+    { text: 'Fine question', type: 'short_text' },
+    { text: 'Broken', type: 'single_choice', options: ['only one'] },
+  ], adminToken);
+  assert.equal(bad.status, 400);
+  assert.match(bad.body.error, /^Question 2:/);
+  assert.equal((await call('GET', '/admin/questions', undefined, adminToken)).body.length, before);
+
+  const list = [
+    { text: 'Which course did you attend?', type: 'short_text', required: true },
+    { text: 'What did you like most?', type: 'long_text' },
+    { text: 'How did you hear about us?', type: 'single_choice', options: ['Friend', 'Social media'], required: true },
+    { text: 'Which topics were useful?', type: 'multiple_choice', options: ['HTML', 'React', 'Node'] },
+    { text: 'Would you recommend us?', type: 'yes_no', required: true },
+    { text: 'what did you like MOST?', type: 'long_text' }, // duplicate (case-insensitive)
+  ];
+  const ok = await call('POST', '/admin/questions/import', { questions: list }, adminToken);
+  assert.equal(ok.status, 201);
+  assert.equal(ok.body.imported, 5);
+  assert.equal(ok.body.skipped, 1);
+  assert.deepEqual(ok.body.questions.slice(-5).map((q) => q.type), ['short_text', 'long_text', 'single_choice', 'multiple_choice', 'yes_no']);
+
+  // Importing the same file again adds nothing.
+  const again = await call('POST', '/admin/questions/import', list, adminToken);
+  assert.deepEqual([again.body.imported, again.body.skipped], [0, 6]);
+});
