@@ -5,3 +5,6 @@ client/dist/
 data/
 backups/
 *.log
+
+# Render environment file (contains secrets)
+render.env
