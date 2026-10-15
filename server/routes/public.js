@@ -4,7 +4,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const storage = require('../lib/storage');
 const { HttpError } = require('../lib/http');
-const { activeSorted } = require('../lib/content');
+const { activeSorted, categoryOf } = require('../lib/content');
 const { cleanString, cleanEmail, cleanMobile, truncate } = require('../lib/validate');
 
 const router = express.Router();
@@ -27,8 +27,8 @@ router.get('/form', (req, res) => {
     title: config.formTitle,
     description: config.formDescription,
     open: true,
-    questions: activeSorted('questions').map(({ id, text, type, options, required }) => ({ id, text, type, options, required })),
-    attributes: activeSorted('attributes').map(({ id, name, description, scale, required }) => ({ id, name, description, scale, required })),
+    questions: activeSorted('questions').map((q) => ({ id: q.id, text: q.text, type: q.type, options: q.options, required: q.required, category: categoryOf(q) })),
+    attributes: activeSorted('attributes').map((a) => ({ id: a.id, name: a.name, description: a.description, scale: a.scale, required: a.required, category: categoryOf(a) })),
   });
 });
 
@@ -68,7 +68,7 @@ function buildAnswers(input) {
         continue;
     }
     if (q.required && empty) throw new HttpError(400, `Please answer the question ${label}.`);
-    answers.push({ questionId: q.id, question: q.text, type: q.type, answer: value });
+    answers.push({ questionId: q.id, question: q.text, type: q.type, category: categoryOf(q), answer: value });
   }
   return answers;
 }
@@ -82,7 +82,7 @@ function buildRatings(input) {
       throw new HttpError(400, `Rating for "${a.name}" must be from 1 to ${a.scale}.`);
     }
     if (a.required && value === null) throw new HttpError(400, `Please rate "${a.name}".`);
-    ratings.push({ attributeId: a.id, name: a.name, scale: a.scale, value });
+    ratings.push({ attributeId: a.id, name: a.name, scale: a.scale, category: categoryOf(a), value });
   }
   return ratings;
 }

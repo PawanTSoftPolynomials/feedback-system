@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { Alert, Field, Loading, RatingInput } from '../components/ui.jsx';
+import { CATEGORIES } from '../categories.js';
 
 const EMPTY_STUDENT = { fullName: '', mobile: '', email: '', college: '' };
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -177,28 +178,32 @@ export default function FeedbackPage() {
 
       {step === 'form' && (
         <form onSubmit={submit} noValidate>
-          {form.questions.length > 0 && (
-            <section className="card">
-              <h2>Questions</h2>
-              {form.questions.map((q, i) => (
-                <Field key={q.id} label={`${i + 1}. ${q.text}`} required={q.required} error={errors[`q-${q.id}`]} htmlFor={`q-${q.id}`}>
-                  <QuestionInput q={q} value={answers[q.id]} onChange={(v) => setAnswers({ ...answers, [q.id]: v })} />
-                </Field>
-              ))}
-            </section>
-          )}
-
-          {form.attributes.length > 0 && (
-            <section className="card">
-              <h2>Ratings</h2>
-              <p className="muted small">1 is the lowest rating; the highest number is the best.</p>
-              {form.attributes.map((a) => (
-                <Field key={a.id} label={`${a.name} (1–${a.scale})`} required={a.required} hint={a.description} error={errors[`a-${a.id}`]}>
-                  <RatingInput scale={a.scale} value={ratings[a.id] || null} onChange={(v) => setRatings({ ...ratings, [a.id]: v })} />
-                </Field>
-              ))}
-            </section>
-          )}
+          {CATEGORIES.map((c) => {
+            const questions = form.questions.filter((q) => q.category === c.id);
+            const attributes = form.attributes.filter((a) => a.category === c.id);
+            if (!questions.length && !attributes.length) return null;
+            return (
+              <section className="card" key={c.id}>
+                <h2>{c.label} feedback</h2>
+                {questions.map((q, i) => (
+                  <Field key={q.id} label={`${i + 1}. ${q.text}`} required={q.required} error={errors[`q-${q.id}`]} htmlFor={`q-${q.id}`}>
+                    <QuestionInput q={q} value={answers[q.id]} onChange={(v) => setAnswers({ ...answers, [q.id]: v })} />
+                  </Field>
+                ))}
+                {attributes.length > 0 && (
+                  <div className="rating-group">
+                    <h3>Rate the {c.label}</h3>
+                    <p className="muted small">1 is the lowest rating; the highest number is the best.</p>
+                    {attributes.map((a) => (
+                      <Field key={a.id} label={`${a.name} (1–${a.scale})`} required={a.required} hint={a.description} error={errors[`a-${a.id}`]}>
+                        <RatingInput scale={a.scale} value={ratings[a.id] || null} onChange={(v) => setRatings({ ...ratings, [a.id]: v })} />
+                      </Field>
+                    ))}
+                  </div>
+                )}
+              </section>
+            );
+          })}
 
           <section className="card card-highlight">
             <h2>Your own feedback</h2>

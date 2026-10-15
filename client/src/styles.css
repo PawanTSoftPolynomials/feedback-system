@@ -209,3 +209,10 @@ textarea.input { resize: vertical; }
 .code-input { font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; font-size: 0.85rem; line-height: 1.5; }
 .import-tools { margin-bottom: 10px; align-items: center; }
 code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size: 0.9em; background: #eceff3; padding: 1px 5px; border-radius: 4px; }
+
+h3 { font-size: 1rem; margin: 0 0 8px; }
+.rating-group { border-top: 1px solid var(--border); padding-top: 16px; margin-top: 8px; }
+.rating-group:first-of-type { border-top: none; padding-top: 0; margin-top: 0; }
+.tab-count { display: inline-block; min-width: 20px; padding: 0 6px; margin-left: 4px; border-radius: 999px; background: #eceff3; color: var(--muted); font-size: 0.75rem; }
+.section-label { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--primary-dark); font-weight: 700; margin: 0 0 8px; }
+.summary-group + .summary-group { margin-top: 18px; }

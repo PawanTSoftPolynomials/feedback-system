@@ -33,11 +33,15 @@ export default function useOrderedList(resource) {
     setItems((list) => list.filter((i) => i.id !== id));
   });
 
-  const move = (index, delta) => run(async () => {
-    const target = index + delta;
-    if (target < 0 || target >= items.length) return;
+  // Swaps an item with its neighbour in the visible list (e.g. one section) within the full order.
+  const move = (visible, index, delta) => run(async () => {
+    const a = visible[index];
+    const b = visible[index + delta];
+    if (!a || !b) return;
     const ids = items.map((i) => i.id);
-    [ids[index], ids[target]] = [ids[target], ids[index]];
+    const ia = ids.indexOf(a.id);
+    const ib = ids.indexOf(b.id);
+    [ids[ia], ids[ib]] = [ids[ib], ids[ia]];
     setItems(await adminApi.put(`/admin/${resource}/reorder`, { ids }));
   }).catch(() => reload());
 

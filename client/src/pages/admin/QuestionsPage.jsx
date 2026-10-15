@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import useOrderedList from '../../components/useOrderedList.js';
 import { Alert, Badge, Field, Loading } from '../../components/ui.jsx';
+import CategoryTabs from '../../components/CategoryTabs.jsx';
+import { CATEGORIES, categoryLabel } from '../../categories.js';
 import OrderedList from './OrderedList.jsx';
 import QuestionImport from './QuestionImport.jsx';
 
@@ -13,9 +15,10 @@ export const QUESTION_TYPES = {
 };
 const isChoice = (type) => type === 'single_choice' || type === 'multiple_choice';
 
-function QuestionEditor({ initial, onSave, onCancel }) {
+function QuestionEditor({ initial, defaultCategory, onSave, onCancel }) {
   const [text, setText] = useState(initial?.text || '');
   const [type, setType] = useState(initial?.type || 'short_text');
+  const [category, setCategory] = useState(initial?.category || defaultCategory);
   const [options, setOptions] = useState((initial?.options || []).join('\n'));
   const [required, setRequired] = useState(initial ? initial.required : false);
   const [active, setActive] = useState(initial ? initial.active !== false : true);
@@ -25,7 +28,7 @@ function QuestionEditor({ initial, onSave, onCancel }) {
     e.preventDefault();
     setBusy(true);
     try {
-      await onSave({ text, type, options: isChoice(type) ? options.split('\n').map((o) => o.trim()).filter(Boolean) : [], required, active });
+      await onSave({ text, type, category, options: isChoice(type) ? options.split('\n').map((o) => o.trim()).filter(Boolean) : [], required, active });
     } catch { /* error shown by parent */ } finally {
       setBusy(false);
     }
@@ -36,11 +39,18 @@ function QuestionEditor({ initial, onSave, onCancel }) {
       <Field label="Question" required htmlFor="q-text">
         <input id="q-text" className="input" maxLength={300} value={text} onChange={(e) => setText(e.target.value)} required autoFocus />
       </Field>
-      <Field label="Answer type" htmlFor="q-type">
-        <select id="q-type" className="input" value={type} onChange={(e) => setType(e.target.value)}>
-          {Object.entries(QUESTION_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-        </select>
-      </Field>
+      <div className="grid-2">
+        <Field label="Answer type" htmlFor="q-type">
+          <select id="q-type" className="input" value={type} onChange={(e) => setType(e.target.value)}>
+            {Object.entries(QUESTION_TYPES).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </select>
+        </Field>
+        <Field label="Section" htmlFor="q-category">
+          <select id="q-category" className="input" value={category} onChange={(e) => setCategory(e.target.value)}>
+            {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+          </select>
+        </Field>
+      </div>
       {isChoice(type) && (
         <Field label="Options (one per line, at least 2)" required htmlFor="q-options">
           <textarea id="q-options" className="input" rows={4} value={options} onChange={(e) => setOptions(e.target.value)} />
@@ -60,9 +70,13 @@ function QuestionEditor({ initial, onSave, onCancel }) {
 
 export default function QuestionsPage() {
   const list = useOrderedList('questions');
+  const [category, setCategory] = useState(CATEGORIES[0].id);
   const [importing, setImporting] = useState(false);
   const [notice, setNotice] = useState('');
   if (!list.items) return list.error ? <Alert>{list.error}</Alert> : <Loading />;
+
+  const visible = list.items.filter((q) => q.category === category);
+  const label = categoryLabel(category);
 
   const onImported = (res) => {
     list.setItems(res.questions);
@@ -76,12 +90,14 @@ export default function QuestionsPage() {
         <h1>Feedback questions</h1>
         {!importing && <button className="btn btn-secondary btn-sm" onClick={() => { setNotice(''); setImporting(true); }}>Import JSON</button>}
       </div>
+      <p className="muted">Questions are grouped into LMS and Course sections. Students see active questions of each section in this order. Old submissions keep their answers even if a question is edited or deleted.</p>
+      <CategoryTabs value={category} onChange={(c) => { setCategory(c); setNotice(''); }} items={list.items} />
       <Alert type="success">{notice}</Alert>
-      {importing && <QuestionImport onImported={onImported} onClose={() => setImporting(false)} />}
-      <p className="muted">Students see active questions in this order. Old submissions keep their answers even if a question is edited or deleted.</p>
+      {importing && <QuestionImport defaultCategory={category} onImported={onImported} onClose={() => setImporting(false)} />}
       <OrderedList
         list={list}
-        noun="question"
+        items={visible}
+        noun={`${label} question`}
         renderItem={(q) => (
           <>
             <strong>{q.text}</strong>
@@ -93,7 +109,7 @@ export default function QuestionsPage() {
             </div>
           </>
         )}
-        renderEditor={(item, onSave, onCancel) => <QuestionEditor initial={item} onSave={onSave} onCancel={onCancel} />}
+        renderEditor={(item, onSave, onCancel) => <QuestionEditor initial={item} defaultCategory={category} onSave={onSave} onCancel={onCancel} />}
       />
     </>
   );

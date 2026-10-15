@@ -257,3 +257,40 @@ test('bulk JSON import of questions', async () => {
   const again = await call('POST', '/admin/questions/import', list, adminToken);
   assert.deepEqual([again.body.imported, again.body.skipped], [0, 6]);
 });
+
+test('questions and ratings are split into LMS and Course sections', async () => {
+  const q = await call('POST', '/admin/questions', { text: 'Was the trainer clear?', type: 'yes_no', category: 'course', required: true }, adminToken);
+  assert.equal(q.body.category, 'course');
+  assert.equal((await call('POST', '/admin/questions', { text: 'Bad', type: 'yes_no', category: 'other' }, adminToken)).status, 400);
+  const noCategory = await call('POST', '/admin/questions', { text: 'Is the LMS fast?', type: 'yes_no' }, adminToken);
+  assert.equal(noCategory.body.category, 'lms');
+
+  const a = await call('POST', '/admin/attributes', { name: 'Trainer Knowledge', category: 'Course', scale: 5 }, adminToken);
+  assert.equal(a.body.category, 'course');
+
+  // Import: the list-level category is the default; per-question category wins.
+  // The same text may exist once per section.
+  const imp = await call('POST', '/admin/questions/import', {
+    category: 'course',
+    questions: [
+      { text: 'Is the LMS fast?', type: 'yes_no' },
+      { text: 'Is the LMS fast?', type: 'yes_no', category: 'lms' },
+    ],
+  }, adminToken);
+  assert.deepEqual([imp.body.imported, imp.body.skipped], [1, 1]);
+  assert.ok(imp.body.questions.some((x) => x.text === 'Is the LMS fast?' && x.category === 'course'));
+
+  const form = await call('GET', '/form');
+  assert.ok(form.body.questions.every((x) => ['lms', 'course'].includes(x.category)));
+  assert.equal(form.body.attributes.find((x) => x.id === a.body.id).category, 'course');
+
+  // Submissions keep the section of every answer and rating.
+  const answers = Object.fromEntries(form.body.questions.filter((x) => x.required).map((x) => [x.id, x.type === 'yes_no' ? 'yes' : x.type.endsWith('choice') ? x.options[0] : 'ok']));
+  const ratings = Object.fromEntries(form.body.attributes.map((x) => [x.id, 3]));
+  assert.equal((await call('POST', '/submissions', { student: student(900), answers, ratings })).status, 201);
+  const saved = JSON.parse(fs.readFileSync(path.join(dataDir, 'submissions.json'), 'utf8')).at(-1);
+  assert.equal(saved.answers.find((x) => x.questionId === q.body.id).category, 'course');
+  assert.equal(saved.ratings.find((x) => x.attributeId === a.body.id).category, 'course');
+  const summary = await call('GET', '/admin/summary', undefined, adminToken);
+  assert.equal(summary.body.attributes.find((x) => x.attributeId === a.body.id).category, 'course');
+});

@@ -5,7 +5,7 @@ const rateLimit = require('express-rate-limit');
 const storage = require('../lib/storage');
 const { HttpError } = require('../lib/http');
 const { login, requireAdmin } = require('../lib/auth');
-const { sortedList, sanitizeQuestion, sanitizeAttribute, sanitizePrize, studentSnapshot, feedbackSnapshot } = require('../lib/content');
+const { sortedList, sanitizeQuestion, sanitizeAttribute, sanitizePrize, studentSnapshot, feedbackSnapshot, categoryOf, cleanCategory, CATEGORIES } = require('../lib/content');
 const { cleanString, cleanBool, cleanId, cleanInt } = require('../lib/validate');
 const winnersRouter = require('./winners');
 
@@ -99,8 +99,9 @@ function orderedResource(name, sanitize, { notFound, beforeDelete, decorate = (i
 }
 
 // Submissions keep a copy of each question/attribute text, so deleting one never breaks old feedback.
-orderedResource('questions', sanitizeQuestion, { notFound: 'Question not found.' });
-orderedResource('attributes', sanitizeAttribute, { notFound: 'Rating attribute not found.' });
+const withCategory = (item) => ({ ...item, category: categoryOf(item) });
+orderedResource('questions', sanitizeQuestion, { notFound: 'Question not found.', decorate: withCategory });
+orderedResource('attributes', sanitizeAttribute, { notFound: 'Rating attribute not found.', decorate: withCategory });
 
 // Bulk import: accepts a JSON array of questions (or { "questions": [...] }). Every question is
 // validated before anything is saved. Questions whose text already exists are skipped.
@@ -111,10 +112,11 @@ router.post('/questions/import', async (req, res) => {
   if (list.length === 0) throw new HttpError(400, 'The list of questions is empty.');
   if (list.length > 200) throw new HttpError(400, 'You can import at most 200 questions at a time.');
 
+  const defaultCategory = Array.isArray(body) ? undefined : cleanCategory(body.category);
   const cleaned = list.map((q, i) => {
     if (!q || typeof q !== 'object' || Array.isArray(q)) throw new HttpError(400, `Question ${i + 1}: must be an object like {"text": "...", "type": "short_text"}.`);
     try {
-      return sanitizeQuestion(q);
+      return sanitizeQuestion(q, defaultCategory);
     } catch (err) {
       if (err instanceof HttpError) throw new HttpError(400, `Question ${i + 1}: ${err.message}`);
       throw err;
@@ -122,13 +124,14 @@ router.post('/questions/import', async (req, res) => {
   });
 
   const result = await storage.transaction(['questions'], (d) => {
-    const existing = new Set(d.questions.map((q) => q.text.toLowerCase()));
+    const keyOf = (q) => `${categoryOf(q)}|${q.text.toLowerCase()}`;
+    const existing = new Set(d.questions.map(keyOf));
     let order = d.questions.reduce((max, item) => Math.max(max, item.order), -1) + 1;
     const now = new Date().toISOString();
     let imported = 0;
     let skipped = 0;
     for (const data of cleaned) {
-      const key = data.text.toLowerCase();
+      const key = keyOf(data);
       if (existing.has(key)) {
         skipped += 1;
         continue;
@@ -139,7 +142,7 @@ router.post('/questions/import', async (req, res) => {
     }
     return { imported, skipped };
   });
-  res.status(201).json({ ...result, questions: sortedList('questions') });
+  res.status(201).json({ ...result, questions: sortedList('questions').map(withCategory) });
 });
 orderedResource('prizes', sanitizePrize, {
   notFound: 'Prize not found.',
@@ -255,7 +258,7 @@ router.get('/summary', (req, res) => {
     for (const r of sub.ratings) {
       if (!stats.has(r.attributeId)) {
         const attr = current.get(r.attributeId);
-        stats.set(r.attributeId, { attributeId: r.attributeId, name: attr ? attr.name : r.name, scale: attr ? attr.scale : r.scale, order: attr ? attr.order : 9999, active: attr ? attr.active : false, sum: 0, count: 0, distribution: {} });
+        stats.set(r.attributeId, { attributeId: r.attributeId, category: attr ? categoryOf(attr) : categoryOf(r), name: attr ? attr.name : r.name, scale: attr ? attr.scale : r.scale, order: attr ? attr.order : 9999, active: attr ? attr.active : false, sum: 0, count: 0, distribution: {} });
       }
       if (r.value === null) continue;
       const s = stats.get(r.attributeId);
@@ -265,7 +268,7 @@ router.get('/summary', (req, res) => {
     }
   }
   const attributes = [...stats.values()]
-    .sort((a, b) => a.order - b.order)
+    .sort((a, b) => CATEGORIES.indexOf(a.category) - CATEGORIES.indexOf(b.category) || a.order - b.order)
     .map(({ sum, order, ...s }) => ({ ...s, average: s.count ? Math.round((sum / s.count) * 100) / 100 : null }));
   const winners = storage.get('winners');
   const selected = new Set(storage.get('selections').map((s) => s.winnerId));

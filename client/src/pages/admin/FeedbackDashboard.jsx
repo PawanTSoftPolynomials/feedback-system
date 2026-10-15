@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { adminApi, formatDate } from '../../api.js';
 import { Alert, Badge, Checkbox, Loading, Pagination } from '../../components/ui.jsx';
+import { groupByCategory } from '../../categories.js';
 
 function Summary({ refreshKey }) {
   const [summary, setSummary] = useState(null);
@@ -22,15 +23,20 @@ function Summary({ refreshKey }) {
       {summary.attributes.length > 0 && (
         <section className="card">
           <h2>Rating averages</h2>
-          <div className="bars">
-            {summary.attributes.map((a) => (
-              <div className="bar-row" key={a.attributeId}>
-                <span className="bar-label">{a.name}{!a.active && <span className="muted small"> (inactive)</span>}</span>
-                <span className="bar-track"><span className="bar-fill" style={{ width: `${a.average ? (a.average / a.scale) * 100 : 0}%` }} /></span>
-                <span className="bar-value">{a.average ?? '—'} / {a.scale} <span className="muted small">({a.count})</span></span>
+          {groupByCategory(summary.attributes).map((group) => (
+            <div className="summary-group" key={group.id}>
+              <p className="section-label">{group.label}</p>
+              <div className="bars">
+                {group.items.map((a) => (
+                  <div className="bar-row" key={a.attributeId}>
+                    <span className="bar-label">{a.name}{!a.active && <span className="muted small"> (inactive)</span>}</span>
+                    <span className="bar-track"><span className="bar-fill" style={{ width: `${a.average ? (a.average / a.scale) * 100 : 0}%` }} /></span>
+                    <span className="bar-value">{a.average ?? '—'} / {a.scale} <span className="muted small">({a.count})</span></span>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
+          ))}
         </section>
       )}
     </>

@@ -150,21 +150,25 @@ Anything submitted between taking the backup and restoring it is replaced, so re
 - **Forgot the password:** set `ADMIN_PASSWORD=<new>` and `ADMIN_RESET_PASSWORD=true`, restart, log in, then remove both variables. Changing the password ends all existing admin sessions.
 - Login is rate-limited to 10 attempts per 15 minutes per IP address.
 
+## LMS and Course sections
+
+Questions and rating attributes each belong to a section, **LMS** or **Course**. The admin Questions and Rating attributes pages have one tab per section. The student form shows "LMS feedback" and "Course feedback" separately, each with its questions followed by its ratings. Submissions, winner pages and the rating averages are grouped the same way. Items created before sections existed count as LMS; move them by editing them and changing **Section**.
+
 ## Importing questions from JSON
 
 On **Admin → Questions → Import JSON**, paste a list or choose a `.json` file. You can also send the list in a `POST` to `/api/admin/questions/import` with an admin token. Both a plain array and `{ "questions": [...] }` are accepted, up to 200 questions at a time:
 
 ```json
 [
-  { "text": "Which course did you attend?", "type": "short_text", "required": true },
-  { "text": "What did you like most?", "type": "long_text" },
+  { "category": "course", "text": "Which course did you attend?", "type": "short_text", "required": true },
+  { "category": "lms", "text": "What did you like most about the LMS?", "type": "long_text" },
   { "text": "How did you hear about us?", "type": "single_choice", "options": ["Friend", "Social media", "Other"], "required": true },
   { "text": "Which topics were useful?", "type": "multiple_choice", "options": ["HTML", "React", "Node.js"] },
   { "text": "Would you recommend us?", "type": "yes_no", "required": true }
 ]
 ```
 
-All questions are validated before anything is saved. If one is invalid, the error names it (for example, "Question 3: …") and nothing is imported. Questions whose text already exists are skipped, so importing the same file twice is safe.
+Each question may set `"category": "lms"` or `"course"`. Questions without one use the list-level `category` (`{ "category": "course", "questions": [...] }`), or LMS if neither is set. All questions are validated before anything is saved. If one is invalid, the error names it (for example, "Question 3: …") and nothing is imported. Questions whose text already exists are skipped, so importing the same file twice is safe.
 
 ## Winner and prize flow
 
