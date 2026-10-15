@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { adminApi, formatDate } from '../../api.js';
 import { Alert, Badge, Loading } from '../../components/ui.jsx';
 import { EmailStatus } from './WinnersPage.jsx';
@@ -12,6 +12,7 @@ function formatAnswer(a) {
 
 export default function SubmissionDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [sub, setSub] = useState(null);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState(null);
@@ -33,6 +34,19 @@ export default function SubmissionDetail() {
     } catch (err) {
       setError(err.message);
     } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteSubmission = async () => {
+    if (!window.confirm(`Permanently delete the feedback from ${sub.student?.fullName} and their student details? This cannot be undone.`)) return;
+    setBusy(true);
+    setError('');
+    try {
+      await adminApi.post('/admin/submissions/delete', { ids: [id] });
+      navigate('/admin/feedback', { replace: true });
+    } catch (err) {
+      setError(err.message);
       setBusy(false);
     }
   };
@@ -70,7 +84,10 @@ export default function SubmissionDetail() {
           ) : (
             <>
               <p className="muted">This student has not been declared a winner.</p>
-              <button className="btn btn-primary" onClick={declareWinner} disabled={busy}>{busy ? 'Declaring…' : 'Declare as winner'}</button>
+              <div className="row-actions">
+                <button className="btn btn-primary" onClick={declareWinner} disabled={busy}>{busy ? 'Working…' : 'Declare as winner'}</button>
+                <button className="btn btn-danger" onClick={deleteSubmission} disabled={busy}>Delete feedback</button>
+              </div>
             </>
           )}
         </section>

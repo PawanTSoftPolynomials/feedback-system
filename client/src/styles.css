@@ -194,3 +194,11 @@ textarea.input { resize: vertical; }
   .bar-row { grid-template-columns: 1fr auto; }
   .bar-track { grid-column: 1 / -1; grid-row: 2; }
 }
+
+/* Bulk selection on the feedback dashboard */
+.check-col { width: 36px; }
+.row-check { width: 18px; height: 18px; accent-color: var(--primary); margin: 0; cursor: pointer; }
+.row-check:disabled { cursor: not-allowed; opacity: 0.4; }
+.table tr.row-selected td { background: var(--primary-soft); }
+.selection-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 10px 12px; margin-bottom: 14px; border: 1px solid #f5b48a; border-radius: 8px; background: var(--primary-soft); }
+.selection-bar .btn { margin-left: auto; }

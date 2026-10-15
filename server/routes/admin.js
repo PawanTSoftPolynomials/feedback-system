@@ -122,16 +122,15 @@ function studentSummary(s) {
   return s ? { fullName: s.fullName, email: s.email, mobile: s.mobile, college: s.college } : null;
 }
 
-router.get('/submissions', (req, res) => {
-  const page = cleanInt(req.query.page, 'page', { min: 1, max: 100000, fallback: 1 });
-  const limit = cleanInt(req.query.limit, 'limit', { min: 5, max: 100, fallback: 20 });
-  const search = typeof req.query.search === 'string' ? req.query.search.trim().toLowerCase().slice(0, 100) : '';
-  const filter = ['winners', 'non-winners'].includes(req.query.filter) ? req.query.filter : 'all';
+/** Submissions matching the dashboard's search and filter, newest first. */
+function matchingSubmissions(query) {
+  const search = typeof query.search === 'string' ? query.search.trim().toLowerCase().slice(0, 100) : '';
+  const filter = ['winners', 'non-winners'].includes(query.filter) ? query.filter : 'all';
 
   const students = new Map(storage.get('students').map((s) => [s.id, s]));
   const winnerSubmissions = new Set(storage.get('winners').map((w) => w.submissionId));
 
-  let rows = storage.get('submissions').slice().reverse(); // newest first
+  let rows = storage.get('submissions').slice().reverse();
   if (filter === 'winners') rows = rows.filter((r) => winnerSubmissions.has(r.id));
   if (filter === 'non-winners') rows = rows.filter((r) => !winnerSubmissions.has(r.id));
   if (search) {
@@ -140,6 +139,13 @@ router.get('/submissions', (req, res) => {
       return s && [s.fullName, s.email, s.mobile, s.college].some((v) => v.toLowerCase().includes(search));
     });
   }
+  return { rows, students, winnerSubmissions };
+}
+
+router.get('/submissions', (req, res) => {
+  const page = cleanInt(req.query.page, 'page', { min: 1, max: 100000, fallback: 1 });
+  const limit = cleanInt(req.query.limit, 'limit', { min: 5, max: 100, fallback: 20 });
+  const { rows, students, winnerSubmissions } = matchingSubmissions(req.query);
   const total = rows.length;
   const items = rows.slice((page - 1) * limit, page * limit).map((r) => ({
     id: r.id,
@@ -150,6 +156,36 @@ router.get('/submissions', (req, res) => {
     isWinner: winnerSubmissions.has(r.id),
   }));
   res.json({ items, total, page, limit, pages: Math.max(1, Math.ceil(total / limit)) });
+});
+
+// Ids of every deletable (non-winner) submission matching the search/filter, for "select all".
+router.get('/submissions/ids', (req, res) => {
+  const { rows, winnerSubmissions } = matchingSubmissions(req.query);
+  res.json({ ids: rows.filter((r) => !winnerSubmissions.has(r.id)).map((r) => r.id) });
+});
+
+// Deletes submissions and their student records. Winners' submissions are kept, because
+// their winner and prize-selection records depend on them.
+router.post('/submissions/delete', async (req, res) => {
+  const ids = (req.body || {}).ids;
+  if (!Array.isArray(ids) || ids.length === 0) throw new HttpError(400, 'Select at least one submission to delete.');
+  if (ids.length > 10000) throw new HttpError(400, 'Too many submissions in one request.');
+  const wanted = new Set(ids.map((id) => cleanId(id, 'submission')));
+
+  const result = await storage.transaction(['students', 'submissions'], (d) => {
+    const winnerSubmissions = new Set(storage.get('winners').map((w) => w.submissionId));
+    const matched = d.submissions.filter((s) => wanted.has(s.id));
+    const toDelete = matched.filter((s) => !winnerSubmissions.has(s.id));
+    if (toDelete.length === 0 && matched.length > 0) {
+      throw new HttpError(409, 'Winners\' submissions cannot be deleted. Remove the winner first on the Winners page.');
+    }
+    const deleteIds = new Set(toDelete.map((s) => s.id));
+    const deleteStudents = new Set(toDelete.map((s) => s.studentId));
+    d.submissions = d.submissions.filter((s) => !deleteIds.has(s.id));
+    d.students = d.students.filter((s) => !deleteStudents.has(s.id));
+    return { deleted: toDelete.length, skippedWinners: matched.length - toDelete.length, notFound: wanted.size - matched.length };
+  });
+  res.json(result);
 });
 
 router.get('/submissions/:id', (req, res) => {

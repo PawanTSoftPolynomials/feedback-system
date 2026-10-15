@@ -163,3 +163,33 @@ test('data directory is not served', async () => {
   const res = await fetch(base.replace('/api', '') + '/data/admin.json');
   assert.notEqual(res.headers.get('content-type') || '', 'application/json');
 });
+
+test('bulk delete removes submissions and students but keeps winners', async () => {
+  assert.equal((await call('POST', '/admin/submissions/delete', { ids: [] })).status, 401);
+  assert.equal((await call('POST', '/admin/submissions/delete', { ids: [] }, adminToken)).status, 400);
+
+  const before = await call('GET', '/admin/summary', undefined, adminToken);
+  const winners = await call('GET', '/admin/winners', undefined, adminToken);
+  const winnerSubmissionId = winners.body[0].submissionId;
+
+  const nonWinnerIds = (await call('GET', '/admin/submissions/ids?search=student 10', undefined, adminToken)).body.ids;
+  assert.ok(nonWinnerIds.length > 0);
+  assert.ok(!nonWinnerIds.includes(winnerSubmissionId));
+
+  // A winner-only delete is refused; a mixed delete keeps the winner.
+  assert.equal((await call('POST', '/admin/submissions/delete', { ids: [winnerSubmissionId] }, adminToken)).status, 409);
+  const res = await call('POST', '/admin/submissions/delete', { ids: [...nonWinnerIds, winnerSubmissionId, 'missing-id'] }, adminToken);
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body, { deleted: nonWinnerIds.length, skippedWinners: 1, notFound: 1 });
+
+  const after = await call('GET', '/admin/summary', undefined, adminToken);
+  assert.equal(after.body.totalSubmissions, before.body.totalSubmissions - nonWinnerIds.length);
+  assert.equal((await call('GET', `/admin/submissions/${winnerSubmissionId}`, undefined, adminToken)).status, 200);
+  const students = JSON.parse(fs.readFileSync(path.join(dataDir, 'students.json'), 'utf8'));
+  const submissions = JSON.parse(fs.readFileSync(path.join(dataDir, 'submissions.json'), 'utf8'));
+  assert.equal(students.length, submissions.length);
+
+  // A deleted student can submit again.
+  const again = await call('POST', '/submissions', { student: student(100), answers: { [questionId]: 'A' }, ratings: { [attributeId]: 4 } });
+  assert.equal(again.status, 201);
+});
