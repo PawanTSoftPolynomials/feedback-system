@@ -8,3 +8,4 @@ backups/
 
 # Render environment file (contains secrets)
 render.env
+.playwright-mcp/
