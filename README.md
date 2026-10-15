@@ -161,6 +161,8 @@ Anything submitted between taking the backup and restoring it is replaced, so re
 4. The winner opens the link. The server verifies the token and shows the active prizes, and the winner confirms exactly one. The selection time is recorded, and a second or conflicting selection is rejected.
 5. To let a winner change their choice, the admin clicks **Allow change** on the Winners page. This allows one change, after which the selection locks again.
 
+Each winner is stored separately: when they are declared, a copy of their details and feedback is saved in the winner record, and each winner has their own page (`/admin/winners/<id>`). Deleting feedback on the Feedback page therefore never removes a winner. Winners can be deleted on the Winners page, one at a time or several at once using the checkboxes. Deleting a winner also deletes their prize choice and stops their prize link from working.
+
 ## Brevo setup checklist
 
 - Use the same Brevo account and API key as the LMS (`BREVO_API_KEY`).

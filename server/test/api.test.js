@@ -164,32 +164,63 @@ test('data directory is not served', async () => {
   assert.notEqual(res.headers.get('content-type') || '', 'application/json');
 });
 
-test('bulk delete removes submissions and students but keeps winners', async () => {
+test('bulk delete removes feedback; winners keep their own stored copy', async () => {
   assert.equal((await call('POST', '/admin/submissions/delete', { ids: [] })).status, 401);
   assert.equal((await call('POST', '/admin/submissions/delete', { ids: [] }, adminToken)).status, 400);
 
   const before = await call('GET', '/admin/summary', undefined, adminToken);
-  const winners = await call('GET', '/admin/winners', undefined, adminToken);
-  const winnerSubmissionId = winners.body[0].submissionId;
+  const winner = (await call('GET', '/admin/winners', undefined, adminToken)).body[0];
+  const ids = (await call('GET', '/admin/submissions/ids?search=student 10', undefined, adminToken)).body.ids;
+  assert.ok(ids.length > 0);
 
-  const nonWinnerIds = (await call('GET', '/admin/submissions/ids?search=student 10', undefined, adminToken)).body.ids;
-  assert.ok(nonWinnerIds.length > 0);
-  assert.ok(!nonWinnerIds.includes(winnerSubmissionId));
-
-  // A winner-only delete is refused; a mixed delete keeps the winner.
-  assert.equal((await call('POST', '/admin/submissions/delete', { ids: [winnerSubmissionId] }, adminToken)).status, 409);
-  const res = await call('POST', '/admin/submissions/delete', { ids: [...nonWinnerIds, winnerSubmissionId, 'missing-id'] }, adminToken);
+  const res = await call('POST', '/admin/submissions/delete', { ids: [...ids, winner.submissionId, 'missing-id'] }, adminToken);
   assert.equal(res.status, 200);
-  assert.deepEqual(res.body, { deleted: nonWinnerIds.length, skippedWinners: 1, notFound: 1 });
+  assert.deepEqual(res.body, { deleted: ids.length + 1, winnersKept: 1, notFound: 1 });
 
   const after = await call('GET', '/admin/summary', undefined, adminToken);
-  assert.equal(after.body.totalSubmissions, before.body.totalSubmissions - nonWinnerIds.length);
-  assert.equal((await call('GET', `/admin/submissions/${winnerSubmissionId}`, undefined, adminToken)).status, 200);
+  assert.equal(after.body.totalSubmissions, before.body.totalSubmissions - ids.length - 1);
+  assert.equal(after.body.totalWinners, before.body.totalWinners);
   const students = JSON.parse(fs.readFileSync(path.join(dataDir, 'students.json'), 'utf8'));
   const submissions = JSON.parse(fs.readFileSync(path.join(dataDir, 'submissions.json'), 'utf8'));
   assert.equal(students.length, submissions.length);
 
+  // The winner's separate record still has the student's details and feedback.
+  const detail = await call('GET', `/admin/winners/${winner.id}`, undefined, adminToken);
+  assert.equal(detail.status, 200);
+  assert.equal(detail.body.submissionExists, false);
+  assert.equal(detail.body.student.email, winner.student.email);
+  assert.ok(detail.body.feedback.ratings.length > 0);
+  assert.equal(detail.body.selection.prizeName, 'Gift Voucher');
+
   // A deleted student can submit again.
   const again = await call('POST', '/submissions', { student: student(100), answers: { [questionId]: 'A' }, ratings: { [attributeId]: 4 } });
   assert.equal(again.status, 201);
+});
+
+test('winners page: declared winners are stored separately and can be deleted', async () => {
+  const subs = (await call('GET', '/admin/submissions?filter=non-winners&limit=100', undefined, adminToken)).body.items;
+  const declared = [];
+  for (const sub of subs.slice(0, 2)) declared.push((await call('POST', '/admin/winners', { submissionId: sub.id }, adminToken)).body);
+  const stored = JSON.parse(fs.readFileSync(path.join(dataDir, 'winners.json'), 'utf8'));
+  for (const w of declared) {
+    const rec = stored.find((x) => x.id === w.id);
+    assert.equal(rec.student.email, subs.find((s) => s.id === w.submissionId).student.email);
+    assert.ok(Array.isArray(rec.feedback.answers));
+  }
+
+  // Deleting a winner with a prize also removes the selection and invalidates the link.
+  const token = sentEmails.at(-1).html.match(/\/prize\/([\w-]+)/)[1];
+  const prizes = (await call('GET', '/admin/prizes', undefined, adminToken)).body.filter((p) => p.active);
+  assert.equal((await call('POST', '/portal/select', { token, prizeId: prizes[0].id })).status, 200);
+  assert.equal((await call('POST', '/admin/winners/delete', { ids: [] }, adminToken)).status, 400);
+  const del = await call('POST', '/admin/winners/delete', { ids: declared.map((w) => w.id) }, adminToken);
+  assert.deepEqual(del.body, { deleted: 2, selectionsDeleted: 1, notFound: 0 });
+  assert.equal((await call('POST', '/portal/session', { token })).status, 404);
+  const remaining = (await call('GET', '/admin/winners', undefined, adminToken)).body;
+  assert.ok(remaining.every((w) => !declared.some((d) => d.id === w.id)));
+  assert.ok(!JSON.parse(fs.readFileSync(path.join(dataDir, 'selections.json'), 'utf8')).some((s) => declared.some((d) => d.id === s.winnerId)));
+
+  // Single delete of the remaining winner (who also has a prize selected).
+  assert.equal((await call('DELETE', `/admin/winners/${remaining[0].id}`, undefined, adminToken)).status, 204);
+  assert.equal((await call('GET', `/admin/winners/${remaining[0].id}`, undefined, adminToken)).status, 404);
 });

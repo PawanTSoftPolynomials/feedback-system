@@ -5,7 +5,7 @@ const rateLimit = require('express-rate-limit');
 const storage = require('../lib/storage');
 const { HttpError } = require('../lib/http');
 const { login, requireAdmin } = require('../lib/auth');
-const { sortedList, sanitizeQuestion, sanitizeAttribute, sanitizePrize } = require('../lib/content');
+const { sortedList, sanitizeQuestion, sanitizeAttribute, sanitizePrize, studentSnapshot, feedbackSnapshot } = require('../lib/content');
 const { cleanString, cleanBool, cleanId, cleanInt } = require('../lib/validate');
 const winnersRouter = require('./winners');
 
@@ -158,32 +158,34 @@ router.get('/submissions', (req, res) => {
   res.json({ items, total, page, limit, pages: Math.max(1, Math.ceil(total / limit)) });
 });
 
-// Ids of every deletable (non-winner) submission matching the search/filter, for "select all".
+// Ids of every submission matching the search/filter, for "select all".
 router.get('/submissions/ids', (req, res) => {
-  const { rows, winnerSubmissions } = matchingSubmissions(req.query);
-  res.json({ ids: rows.filter((r) => !winnerSubmissions.has(r.id)).map((r) => r.id) });
+  res.json({ ids: matchingSubmissions(req.query).rows.map((r) => r.id) });
 });
 
-// Deletes submissions and their student records. Winners' submissions are kept, because
-// their winner and prize-selection records depend on them.
+// Deletes submissions and their student records. Winners are stored separately: before a
+// winner's submission is removed, its details and feedback are copied into the winner record.
 router.post('/submissions/delete', async (req, res) => {
   const ids = (req.body || {}).ids;
   if (!Array.isArray(ids) || ids.length === 0) throw new HttpError(400, 'Select at least one submission to delete.');
   if (ids.length > 10000) throw new HttpError(400, 'Too many submissions in one request.');
   const wanted = new Set(ids.map((id) => cleanId(id, 'submission')));
 
-  const result = await storage.transaction(['students', 'submissions'], (d) => {
-    const winnerSubmissions = new Set(storage.get('winners').map((w) => w.submissionId));
-    const matched = d.submissions.filter((s) => wanted.has(s.id));
-    const toDelete = matched.filter((s) => !winnerSubmissions.has(s.id));
-    if (toDelete.length === 0 && matched.length > 0) {
-      throw new HttpError(409, 'Winners\' submissions cannot be deleted. Remove the winner first on the Winners page.');
-    }
+  const result = await storage.transaction(['students', 'submissions', 'winners'], (d) => {
+    const toDelete = d.submissions.filter((s) => wanted.has(s.id));
     const deleteIds = new Set(toDelete.map((s) => s.id));
     const deleteStudents = new Set(toDelete.map((s) => s.studentId));
+    let winnersKept = 0;
+    for (const w of d.winners) {
+      if (!deleteIds.has(w.submissionId)) continue;
+      winnersKept += 1;
+      const sub = toDelete.find((s) => s.id === w.submissionId);
+      if (!w.student) w.student = studentSnapshot(d.students.find((s) => s.id === sub.studentId));
+      if (!w.feedback) w.feedback = feedbackSnapshot(sub);
+    }
     d.submissions = d.submissions.filter((s) => !deleteIds.has(s.id));
     d.students = d.students.filter((s) => !deleteStudents.has(s.id));
-    return { deleted: toDelete.length, skippedWinners: matched.length - toDelete.length, notFound: wanted.size - matched.length };
+    return { deleted: toDelete.length, winnersKept, notFound: wanted.size - toDelete.length };
   });
   res.json(result);
 });

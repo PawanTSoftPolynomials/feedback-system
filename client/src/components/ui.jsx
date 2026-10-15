@@ -1,3 +1,5 @@
+import { useEffect, useRef } from 'react';
+
 export function Alert({ type = 'error', children }) {
   if (!children) return null;
   return <div className={`alert alert-${type}`} role={type === 'error' ? 'alert' : 'status'}>{children}</div>;
@@ -54,4 +56,13 @@ export function Pagination({ page, pages, onChange }) {
       <button className="btn btn-secondary btn-sm" disabled={page >= pages} onClick={() => onChange(page + 1)}>Next</button>
     </div>
   );
+}
+
+/** Checkbox that supports the "partly selected" (indeterminate) state. */
+export function Checkbox({ checked, indeterminate = false, ...props }) {
+  const ref = useRef(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = indeterminate;
+  }, [indeterminate]);
+  return <input ref={ref} type="checkbox" className="row-check" checked={checked} {...props} />;
 }

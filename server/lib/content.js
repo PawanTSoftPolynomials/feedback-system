@@ -57,7 +57,25 @@ function sanitizePrize(body) {
   };
 }
 
+// Copies kept inside each winner record, so a winner stays complete even if the
+// original feedback submission is deleted later.
+function studentSnapshot(s) {
+  return s ? { fullName: s.fullName, email: s.email, mobile: s.mobile, college: s.college } : null;
+}
+
+function feedbackSnapshot(sub) {
+  return sub ? { answers: sub.answers, ratings: sub.ratings, comment: sub.comment, submittedAt: sub.submittedAt } : null;
+}
+
+/** Winner's stored details, falling back to the live student record for older winners. */
+function winnerStudent(winner) {
+  return winner.student || studentSnapshot(storage.get('students').find((s) => s.id === winner.studentId));
+}
+
 module.exports = {
+  studentSnapshot,
+  feedbackSnapshot,
+  winnerStudent,
   QUESTION_TYPES,
   sortedList,
   activeSorted,

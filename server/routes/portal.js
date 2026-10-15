@@ -8,6 +8,7 @@ const storage = require('../lib/storage');
 const { HttpError } = require('../lib/http');
 const { hashToken } = require('../lib/tokens');
 const { cleanId } = require('../lib/validate');
+const { winnerStudent } = require('../lib/content');
 
 const router = express.Router();
 
@@ -34,7 +35,7 @@ function publicSelection(selection) {
 }
 
 function portalView(winner) {
-  const student = storage.get('students').find((s) => s.id === winner.studentId);
+  const student = winnerStudent(winner);
   const selection = storage.get('selections').find((s) => s.winnerId === winner.id);
   const prizes = storage.get('prizes')
     .filter((p) => p.active)

@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { adminApi, formatDate } from '../../api.js';
-import { Alert, Badge, Loading, Pagination } from '../../components/ui.jsx';
+import { Alert, Badge, Checkbox, Loading, Pagination } from '../../components/ui.jsx';
 
 function Summary({ refreshKey }) {
   const [summary, setSummary] = useState(null);
@@ -37,14 +37,6 @@ function Summary({ refreshKey }) {
   );
 }
 
-function Checkbox({ checked, indeterminate = false, ...props }) {
-  const ref = useRef(null);
-  useEffect(() => {
-    if (ref.current) ref.current.indeterminate = indeterminate;
-  }, [indeterminate]);
-  return <input ref={ref} type="checkbox" className="row-check" checked={checked} {...props} />;
-}
-
 export default function FeedbackDashboard() {
   const [query, setQuery] = useState({ page: 1, search: '', filter: 'all' });
   const [searchInput, setSearchInput] = useState('');
@@ -72,7 +64,7 @@ export default function FeedbackDashboard() {
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  const pageIds = data ? data.items.filter((r) => !r.isWinner).map((r) => r.id) : [];
+  const pageIds = data ? data.items.map((r) => r.id) : [];
   const selectedOnPage = pageIds.filter((id) => selected.has(id)).length;
   const allOnPageSelected = pageIds.length > 0 && selectedOnPage === pageIds.length;
 
@@ -117,7 +109,7 @@ export default function FeedbackDashboard() {
     try {
       const res = await adminApi.post('/admin/submissions/delete', { ids: [...selected] });
       let text = `Deleted ${res.deleted} submission(s).`;
-      if (res.skippedWinners) text += ` ${res.skippedWinners} winner submission(s) were kept.`;
+      if (res.winnersKept) text += ` ${res.winnersKept} of them belonged to winners; their winner records are kept on the Winners page.`;
       setNotice(text);
       setSelected(new Set());
       setAllMatching(false);
@@ -186,9 +178,7 @@ export default function FeedbackDashboard() {
                       <td className="check-col">
                         <Checkbox
                           aria-label={`Select ${row.student?.fullName || 'submission'}`}
-                          title={row.isWinner ? 'Winners cannot be deleted' : 'Select'}
                           checked={selected.has(row.id)}
-                          disabled={row.isWinner}
                           onChange={() => toggleRow(row.id)}
                         />
                       </td>
@@ -206,7 +196,7 @@ export default function FeedbackDashboard() {
                 </tbody>
               </table>
             </div>
-            <p className="muted small">{data.total} submission(s). Winners' submissions can't be selected for deletion.</p>
+            <p className="muted small">{data.total} submission(s)</p>
             <Pagination page={data.page} pages={data.pages} onChange={(page) => setQuery({ ...query, page })} />
           </>
         )}

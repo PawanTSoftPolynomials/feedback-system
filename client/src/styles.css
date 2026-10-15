@@ -202,3 +202,6 @@ textarea.input { resize: vertical; }
 .table tr.row-selected td { background: var(--primary-soft); }
 .selection-bar { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 10px 12px; margin-bottom: 14px; border: 1px solid #f5b48a; border-radius: 8px; background: var(--primary-soft); }
 .selection-bar .btn { margin-left: auto; }
+
+.page-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.page-head h1 { margin: 0; }

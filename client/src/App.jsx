@@ -8,6 +8,7 @@ import SubmissionDetail from './pages/admin/SubmissionDetail.jsx';
 import QuestionsPage from './pages/admin/QuestionsPage.jsx';
 import AttributesPage from './pages/admin/AttributesPage.jsx';
 import WinnersPage from './pages/admin/WinnersPage.jsx';
+import WinnerDetail from './pages/admin/WinnerDetail.jsx';
 import PrizesPage from './pages/admin/PrizesPage.jsx';
 import SettingsPage from './pages/admin/SettingsPage.jsx';
 
@@ -24,6 +25,7 @@ export default function App() {
         <Route path="questions" element={<QuestionsPage />} />
         <Route path="ratings" element={<AttributesPage />} />
         <Route path="winners" element={<WinnersPage />} />
+        <Route path="winners/:id" element={<WinnerDetail />} />
         <Route path="prizes" element={<PrizesPage />} />
         <Route path="settings" element={<SettingsPage />} />
       </Route>

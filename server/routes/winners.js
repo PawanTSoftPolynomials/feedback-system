@@ -7,6 +7,7 @@ const mail = require('../lib/mail');
 const { HttpError } = require('../lib/http');
 const { newToken, hashToken } = require('../lib/tokens');
 const { cleanId, cleanBool } = require('../lib/validate');
+const { studentSnapshot, feedbackSnapshot, winnerStudent } = require('../lib/content');
 
 const router = express.Router();
 const SENDING_TIMEOUT_MS = 2 * 60 * 1000;
@@ -38,14 +39,13 @@ function winnerEmail(name, link) {
   </td></tr></table></body></html>`;
 }
 
-function winnerRow(w, students, selections) {
-  const s = students.get(w.studentId);
+function winnerRow(w, selections) {
   const sel = selections.get(w.id);
   return {
     id: w.id,
     submissionId: w.submissionId,
     declaredAt: w.declaredAt,
-    student: s ? { fullName: s.fullName, email: s.email, mobile: s.mobile, college: s.college } : null,
+    student: winnerStudent(w),
     emailStatus: w.emailStatus,
     emailError: w.emailError || null,
     emailSentAt: w.emailSentAt || null,
@@ -58,7 +58,7 @@ function winnerRow(w, students, selections) {
 function rowFor(winnerId) {
   const w = storage.get('winners').find((x) => x.id === winnerId);
   if (!w) return null;
-  return winnerRow(w, new Map(storage.get('students').map((s) => [s.id, s])), new Map(storage.get('selections').map((s) => [s.winnerId, s])));
+  return winnerRow(w, new Map(storage.get('selections').map((s) => [s.winnerId, s])));
 }
 
 /**
@@ -67,10 +67,11 @@ function rowFor(winnerId) {
  */
 async function deliver(winnerId, token, req) {
   const winner = storage.get('winners').find((w) => w.id === winnerId);
-  const student = storage.get('students').find((s) => s.id === winner.studentId);
+  const student = winnerStudent(winner);
   const link = `${publicBaseUrl(req)}/prize/${token}`;
   let update;
   try {
+    if (!student || !student.email) throw new Error('No email address is stored for this winner.');
     const result = await mail.sendEmail(student.email, 'Congratulations! Choose your prize', winnerEmail(student.fullName, link));
     update = { emailStatus: 'sent', emailError: null, emailSentAt: new Date().toISOString(), emailMessageId: (result && result.messageId) || null };
   } catch (err) {
@@ -87,17 +88,30 @@ function isSending(w) {
   return w.emailStatus === 'sending' && Date.now() - new Date(w.emailRequestedAt).getTime() < SENDING_TIMEOUT_MS;
 }
 
+/** Deletes winners and their prize selections; their prize links stop working immediately. */
+function deleteWinners(ids) {
+  const wanted = new Set(ids);
+  return storage.transaction(['winners', 'selections'], (d) => {
+    const found = d.winners.filter((w) => wanted.has(w.id));
+    if (found.length === 0) throw new HttpError(404, 'Winner not found.');
+    const selectionsBefore = d.selections.length;
+    d.winners = d.winners.filter((w) => !wanted.has(w.id));
+    d.selections = d.selections.filter((s) => !wanted.has(s.winnerId));
+    return { deleted: found.length, selectionsDeleted: selectionsBefore - d.selections.length, notFound: wanted.size - found.length };
+  });
+}
+
 router.get('/', (req, res) => {
   const filter = ['selected', 'pending'].includes(req.query.filter) ? req.query.filter : 'all';
-  const students = new Map(storage.get('students').map((s) => [s.id, s]));
   const selections = new Map(storage.get('selections').map((s) => [s.winnerId, s]));
-  let rows = storage.get('winners').map((w) => winnerRow(w, students, selections)).reverse();
+  let rows = storage.get('winners').map((w) => winnerRow(w, selections)).reverse();
   if (filter === 'selected') rows = rows.filter((r) => r.selection);
   if (filter === 'pending') rows = rows.filter((r) => !r.selection);
   res.json(rows);
 });
 
 // Winners are only ever declared manually by the admin through this endpoint.
+// The student's details and feedback are copied into the winner record.
 router.post('/', async (req, res) => {
   const submissionId = cleanId((req.body || {}).submissionId, 'submission');
   const token = newToken();
@@ -105,11 +119,14 @@ router.post('/', async (req, res) => {
     const submission = storage.get('submissions').find((s) => s.id === submissionId);
     if (!submission) throw new HttpError(404, 'Submission not found.');
     if (d.winners.some((w) => w.submissionId === submissionId)) throw new HttpError(409, 'This student has already been declared a winner.');
+    const student = storage.get('students').find((s) => s.id === submission.studentId);
     const now = new Date().toISOString();
     const winner = {
       id: crypto.randomUUID(),
       submissionId,
       studentId: submission.studentId,
+      student: studentSnapshot(student),
+      feedback: feedbackSnapshot(submission),
       declaredAt: now,
       tokenHash: hashToken(token),
       tokenCreatedAt: now,
@@ -125,6 +142,21 @@ router.post('/', async (req, res) => {
   });
   const row = await deliver(winnerId, token, req);
   res.status(201).json(row);
+});
+
+router.post('/delete', async (req, res) => {
+  const ids = (req.body || {}).ids;
+  if (!Array.isArray(ids) || ids.length === 0) throw new HttpError(400, 'Select at least one winner to delete.');
+  if (ids.length > 10000) throw new HttpError(400, 'Too many winners in one request.');
+  res.json(await deleteWinners(ids.map((id) => cleanId(id, 'winner'))));
+});
+
+router.get('/:id', (req, res) => {
+  const id = cleanId(req.params.id);
+  const winner = storage.get('winners').find((w) => w.id === id);
+  if (!winner) throw new HttpError(404, 'Winner not found.');
+  const submission = storage.get('submissions').find((s) => s.id === winner.submissionId);
+  res.json({ ...rowFor(id), feedback: winner.feedback || feedbackSnapshot(submission), submissionExists: Boolean(submission) });
 });
 
 // Issues a fresh link (the previous link stops working) and emails it again.
@@ -153,14 +185,7 @@ router.put('/:id/allow-change', async (req, res) => {
 });
 
 router.delete('/:id', async (req, res) => {
-  const id = cleanId(req.params.id);
-  await storage.transaction(['winners'], (d) => {
-    if (!d.winners.some((w) => w.id === id)) throw new HttpError(404, 'Winner not found.');
-    if (storage.get('selections').some((s) => s.winnerId === id)) {
-      throw new HttpError(409, 'This winner has already selected a prize and cannot be removed.');
-    }
-    d.winners = d.winners.filter((w) => w.id !== id);
-  });
+  await deleteWinners([cleanId(req.params.id)]);
   res.status(204).end();
 });
 
