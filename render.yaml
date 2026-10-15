@@ -1,0 +1,30 @@
+# Render Blueprint. Persistent disks require a paid instance type (not "free").
+services:
+  - type: web
+    name: feedback-system
+    runtime: node
+    plan: starter
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATA_DIR
+        value: /data
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ADMIN_USERNAME
+        value: admin
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: BREVO_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: MAIL_FROM_NAME
+        value: Orange Tree LMS
+    disk:
+      name: feedback-data
+      mountPath: /data
+      sizeGB: 1
