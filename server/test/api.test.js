@@ -294,3 +294,43 @@ test('questions and ratings are split into LMS and Course sections', async () =>
   const summary = await call('GET', '/admin/summary', undefined, adminToken);
   assert.equal(summary.body.attributes.find((x) => x.attributeId === a.body.id).category, 'course');
 });
+
+test('teachers get their own questions, ratings and submissions', async () => {
+  const tq = await call('POST', '/admin/questions', { text: 'Is the LMS useful for teaching?', type: 'yes_no', role: 'teacher', required: true }, adminToken);
+  assert.equal(tq.body.role, 'teacher');
+  assert.equal((await call('POST', '/admin/questions', { text: 'x', type: 'yes_no', role: 'parent' }, adminToken)).status, 400);
+  const ta = await call('POST', '/admin/attributes', { name: 'Course Material for Teaching', role: 'teacher', category: 'course' }, adminToken);
+  assert.equal(ta.body.role, 'teacher');
+
+  // Import with a list-level role; the same text can exist once per role.
+  const imp = await call('POST', '/admin/questions/import', { role: 'teacher', questions: [{ text: 'Was the trainer clear?', type: 'yes_no', category: 'course' }] }, adminToken);
+  assert.equal(imp.body.imported, 1);
+  assert.equal(imp.body.questions.filter((q) => q.text === 'Was the trainer clear?').map((q) => q.role).sort().join(), 'student,teacher');
+
+  const form = (await call('GET', '/form')).body;
+  assert.ok(form.questions.some((q) => q.role === 'teacher') && form.questions.some((q) => q.role === 'student'));
+
+  // A teacher submission only validates teacher questions/ratings (student ones are not required).
+  const teacher = { fullName: 'Teacher One', mobile: '9123456780', email: 'teacher1@example.com', college: 'Test College' };
+  const missing = await call('POST', '/submissions', { role: 'teacher', student: teacher, answers: {}, ratings: { [ta.body.id]: 4 } });
+  assert.equal(missing.status, 400);
+  assert.match(missing.body.error, /useful for teaching/);
+  const ok = await call('POST', '/submissions', { role: 'teacher', student: teacher, answers: { [tq.body.id]: 'yes' }, ratings: { [ta.body.id]: 4 } });
+  assert.equal(ok.status, 201);
+  assert.equal((await call('POST', '/submissions', { role: 'teacher', student: teacher, answers: { [tq.body.id]: 'no' }, ratings: { [ta.body.id]: 2 } })).status, 409);
+
+  const saved = JSON.parse(fs.readFileSync(path.join(dataDir, 'submissions.json'), 'utf8')).at(-1);
+  assert.equal(saved.role, 'teacher');
+  assert.ok(saved.answers.every((a) => form.questions.find((q) => q.id === a.questionId).role === 'teacher'));
+
+  const list = await call('GET', '/admin/submissions?role=teacher', undefined, adminToken);
+  assert.equal(list.body.total, 1);
+  assert.equal(list.body.items[0].role, 'teacher');
+  const summary = (await call('GET', '/admin/summary', undefined, adminToken)).body;
+  assert.equal(summary.byRole.teacher, 1);
+  assert.equal(summary.attributes.find((a) => a.attributeId === ta.body.id).role, 'teacher');
+
+  // Declared teacher winners keep their role.
+  const w = await call('POST', '/admin/winners', { submissionId: list.body.items[0].id }, adminToken);
+  assert.equal(w.body.student.role, 'teacher');
+});

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { adminApi } from '../../api.js';
 import { Alert } from '../../components/ui.jsx';
-import { categoryLabel } from '../../categories.js';
+import { categoryLabel, roleLabel } from '../../categories.js';
 
 const EXAMPLE = `[
   { "category": "lms", "text": "Was the LMS easy to navigate?", "type": "yes_no", "required": true },
@@ -9,7 +9,9 @@ const EXAMPLE = `[
   { "category": "lms", "text": "Any problems you faced while using the LMS?", "type": "long_text" },
   { "category": "course", "text": "Which course did you attend?", "type": "short_text", "required": true },
   { "category": "course", "text": "How was the pace of the course?", "type": "single_choice", "options": ["Too slow", "Just right", "Too fast"], "required": true },
-  { "category": "course", "text": "Would you recommend this course to a friend?", "type": "yes_no", "required": true }
+  { "category": "course", "text": "Would you recommend this course to a friend?", "type": "yes_no", "required": true },
+  { "role": "teacher", "category": "lms", "text": "Is the LMS helpful for managing your classes?", "type": "yes_no", "required": true },
+  { "role": "teacher", "category": "course", "text": "Is the course material suitable for teaching?", "type": "single_choice", "options": ["Yes", "Partly", "No"] }
 ]`;
 
 function parse(text) {
@@ -25,7 +27,7 @@ function parse(text) {
 }
 
 /** Paste or upload a JSON list of questions and add them all at once. */
-export default function QuestionImport({ defaultCategory, onImported, onClose }) {
+export default function QuestionImport({ defaultCategory, defaultRole, onImported, onClose }) {
   const [text, setText] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -44,7 +46,7 @@ export default function QuestionImport({ defaultCategory, onImported, onClose })
     setBusy(true);
     setError('');
     try {
-      const res = await adminApi.post('/admin/questions/import', { category: defaultCategory, questions: parsed.list });
+      const res = await adminApi.post('/admin/questions/import', { category: defaultCategory, role: defaultRole, questions: parsed.list });
       onImported(res);
     } catch (err) {
       setError(err.message);
@@ -59,7 +61,7 @@ export default function QuestionImport({ defaultCategory, onImported, onClose })
       <p className="muted small">
         Paste a JSON array or choose a <code>.json</code> file. Each question needs <code>text</code> and <code>type</code>
         {' '}(<code>short_text</code>, <code>long_text</code>, <code>single_choice</code>, <code>multiple_choice</code>, <code>yes_no</code>).
-        Choice types also need <code>options</code> (at least 2). Optional: <code>category</code> (<code>lms</code> or <code>course</code>; questions without it go to the <strong>{categoryLabel(defaultCategory)}</strong> section), <code>required</code> (default false) and <code>active</code> (default true).
+        Choice types also need <code>options</code> (at least 2). Optional: <code>category</code> (<code>lms</code> or <code>course</code>; questions without it go to the <strong>{categoryLabel(defaultCategory)}</strong> section), <code>role</code> (<code>student</code> or <code>teacher</code>; default <strong>{roleLabel(defaultRole)}</strong>), <code>required</code> (default false) and <code>active</code> (default true).
         Questions are added after the existing ones; questions whose text already exists in the same section are skipped.
       </p>
       <div className="row-actions import-tools">

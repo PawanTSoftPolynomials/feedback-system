@@ -14,3 +14,14 @@ export function groupByCategory(items, getCategory = (item) => item.category) {
   const other = items.filter((item) => !CATEGORIES.some((c) => c.id === getCategory(item)));
   return [...known, { id: 'other', label: 'Other', items: other }].filter((group) => group.items.length > 0);
 }
+
+// Who a question/rating is for, and who submitted feedback. Must match ROLES in server/lib/content.js.
+export const ROLES = [
+  { id: 'student', label: 'Student', plural: 'Students' },
+  { id: 'teacher', label: 'Teacher', plural: 'Teachers' },
+];
+
+export const DEFAULT_ROLE = 'student';
+
+export const roleLabel = (id) => (ROLES.find((r) => r.id === id) || ROLES[0]).label;
+export const roleOf = (item) => (item && ROLES.some((r) => r.id === item.role) ? item.role : DEFAULT_ROLE);

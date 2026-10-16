@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { adminSession, api } from '../../api.js';
 import { Alert, Field } from '../../components/ui.jsx';
+import ThemeToggle from '../../components/ThemeToggle.jsx';
 
 export default function AdminLogin() {
   const navigate = useNavigate();
@@ -32,6 +33,7 @@ export default function AdminLogin() {
 
   return (
     <div className="login-page">
+      <div className="login-theme"><ThemeToggle /></div>
       <form className="card login-card" onSubmit={submit}>
         <h1>Admin login</h1>
         <Field label="Username" htmlFor="username">

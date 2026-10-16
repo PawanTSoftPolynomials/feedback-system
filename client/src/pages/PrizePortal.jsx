@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { api, formatDate } from '../api.js';
 import { Alert, Loading } from '../components/ui.jsx';
+import ThemeToggle from '../components/ThemeToggle.jsx';
 
 export default function PrizePortal() {
   const { token } = useParams();
@@ -101,7 +102,7 @@ export default function PrizePortal() {
   return (
     <div className="public-page">
       <header className="public-header">
-        <div className="container"><h1>Prize selection</h1></div>
+        <div className="container public-header-row"><h1>Prize selection</h1><ThemeToggle /></div>
       </header>
       <main className="container narrow">{body}</main>
     </div>

@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { adminSession } from '../../api.js';
+import ThemeToggle from '../../components/ThemeToggle.jsx';
 
 const LINKS = [
   ['feedback', 'Feedback'],
@@ -40,6 +41,7 @@ export default function AdminLayout() {
               <NavLink key={to} to={`/admin/${to}`} className={({ isActive }) => (isActive ? 'active' : '')}>{label}</NavLink>
             ))}
           </nav>
+          <ThemeToggle />
           <button className="btn btn-secondary btn-sm" onClick={logout}>Log out</button>
         </div>
       </header>

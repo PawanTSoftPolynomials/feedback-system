@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { adminApi, formatDate } from '../../api.js';
 import { Alert, Badge, Loading } from '../../components/ui.jsx';
 import FeedbackContent from '../../components/FeedbackContent.jsx';
+import { roleLabel } from '../../categories.js';
 import { EmailStatus, deleteWinnersMessage } from './WinnersPage.jsx';
 
 /** A single winner's stored record: details, email status, prize choice and feedback. */
@@ -69,6 +70,7 @@ export default function WinnerDetail() {
         <section className="card">
           <h2>Winner details</h2>
           <dl className="details">
+            <dt>Role</dt><dd>{roleLabel(student?.role)}</dd>
             <dt>Email</dt><dd>{student?.email || '—'}</dd>
             <dt>Mobile</dt><dd>{student?.mobile || '—'}</dd>
             <dt>College</dt><dd>{student?.college || '—'}</dd>

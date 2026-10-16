@@ -9,7 +9,7 @@ A small feedback website with an admin dashboard, manual winner selection, Brevo
 
 | URL | Who | What |
 | --- | --- | --- |
-| `/` | Students | Enter details, answer questions, give ratings, write their own feedback |
+| `/` | Students and teachers | Choose a role, enter details, answer that role's questions, give ratings, write their own feedback |
 | `/prize/<token>` | Winners | Personal link from the email; choose exactly one prize |
 | `/admin` | Admin | Feedback dashboard, questions, rating attributes, winners, prizes, settings and backup |
 
@@ -34,7 +34,7 @@ render.yaml           Render Blueprint (web service and persistent disk)
 
 ### Data files (in `DATA_DIR`)
 
-`students.json`, `questions.json`, `attributes.json`, `submissions.json`, `prizes.json`, `winners.json`, `selections.json`, `config.json` (form settings) and `admin.json` (admin username and **bcrypt hash only**).
+`students.json` (everyone who gave feedback, students and teachers, with a `role` field), `questions.json`, `attributes.json`, `submissions.json`, `prizes.json`, `winners.json`, `selections.json`, `config.json` (form settings) and `admin.json` (admin username and **bcrypt hash only**).
 
 How storage behaves:
 
@@ -150,6 +150,14 @@ Anything submitted between taking the backup and restoring it is replaced, so re
 - **Forgot the password:** set `ADMIN_PASSWORD=<new>` and `ADMIN_RESET_PASSWORD=true`, restart, log in, then remove both variables. Changing the password ends all existing admin sessions.
 - Login is rate-limited to 10 attempts per 15 minutes per IP address.
 
+## Students and teachers
+
+The feedback form starts with **I am a Student / I am a Teacher**, and each role sees only the questions and ratings created for it. On the admin Questions and Rating attributes pages, a **For Students / For Teachers** switch selects which set you are editing, and each set has its own LMS and Course tabs. Each person can submit once per role. The Feedback dashboard can be filtered by role, and rating averages are shown per role. Questions, ratings and submissions created before roles existed count as student ones.
+
+## Light and dark theme
+
+Every page has a theme button. Until someone chooses, the site follows the device's light or dark setting; their choice is remembered in that browser.
+
 ## LMS and Course sections
 
 Questions and rating attributes each belong to a section, **LMS** or **Course**. The admin Questions and Rating attributes pages have one tab per section. The student form shows "LMS feedback" and "Course feedback" separately, each with its questions followed by its ratings. Submissions, winner pages and the rating averages are grouped the same way. Items created before sections existed count as LMS; move them by editing them and changing **Section**.
@@ -168,7 +176,7 @@ On **Admin → Questions → Import JSON**, paste a list or choose a `.json` fil
 ]
 ```
 
-Each question may set `"category": "lms"` or `"course"`. Questions without one use the list-level `category` (`{ "category": "course", "questions": [...] }`), or LMS if neither is set. All questions are validated before anything is saved. If one is invalid, the error names it (for example, "Question 3: …") and nothing is imported. Questions whose text already exists are skipped, so importing the same file twice is safe.
+Each question may set `"category"` (`"lms"` or `"course"`) and `"role"` (`"student"` or `"teacher"`). Questions without them use the list-level values (`{ "role": "teacher", "category": "course", "questions": [...] }`). If neither is set, the defaults are LMS and student. In the admin panel, the defaults are the section and role you are viewing. All questions are validated before anything is saved. If one is invalid, the error names it (for example, "Question 3: …") and nothing is imported. Questions whose text already exists are skipped, so importing the same file twice is safe.
 
 ## Winner and prize flow
 

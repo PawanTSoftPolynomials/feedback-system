@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { Alert, Field, Loading, RatingInput } from '../components/ui.jsx';
-import { CATEGORIES } from '../categories.js';
+import { CATEGORIES, ROLES, roleLabel } from '../categories.js';
+import ThemeToggle from '../components/ThemeToggle.jsx';
+
+const ROLE_HINTS = {
+  student: 'I am studying a course and want to share my experience.',
+  teacher: 'I teach or train and want to share my experience.',
+};
 
 const EMPTY_STUDENT = { fullName: '', mobile: '', email: '', college: '' };
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
@@ -66,7 +72,8 @@ function QuestionInput({ q, value, onChange }) {
 export default function FeedbackPage() {
   const [form, setForm] = useState(null);
   const [loadError, setLoadError] = useState('');
-  const [step, setStep] = useState('details');
+  const [step, setStep] = useState('role');
+  const [role, setRole] = useState(null);
   const [student, setStudent] = useState(EMPTY_STUDENT);
   const [answers, setAnswers] = useState({});
   const [ratings, setRatings] = useState({});
@@ -98,18 +105,33 @@ export default function FeedbackPage() {
     window.scrollTo(0, 0);
   };
 
+  // Only the questions and ratings the admin created for the chosen role are shown.
+  const questions = form && role ? form.questions.filter((q) => q.role === role) : [];
+  const attributes = form && role ? form.attributes.filter((a) => a.role === role) : [];
+
+  const chooseRole = (id) => {
+    if (id !== role) {
+      setAnswers({});
+      setRatings({});
+    }
+    setRole(id);
+    setErrors({});
+    setStep('details');
+    window.scrollTo(0, 0);
+  };
+
   const submit = async (e) => {
     e.preventDefault();
     const errs = {};
-    for (const q of form.questions) if (q.required && isEmpty(answers[q.id])) errs[`q-${q.id}`] = 'This question is required.';
-    for (const a of form.attributes) if (a.required && !ratings[a.id]) errs[`a-${a.id}`] = 'Please select a rating.';
+    for (const q of questions) if (q.required && isEmpty(answers[q.id])) errs[`q-${q.id}`] = 'This question is required.';
+    for (const a of attributes) if (a.required && !ratings[a.id]) errs[`a-${a.id}`] = 'Please select a rating.';
     setErrors(errs);
     setSubmitError('');
     if (Object.keys(errs).length) return scrollToFirstError();
 
     setSubmitting(true);
     try {
-      const res = await api.post('/submissions', { student, answers, ratings, comment });
+      const res = await api.post('/submissions', { role, student, answers, ratings, comment });
       setSuccessMessage(res.message);
       setStep('done');
       window.scrollTo(0, 0);
@@ -151,13 +173,33 @@ export default function FeedbackPage() {
   return (
     <Shell title={form.title} description={form.description}>
       <ol className="steps" aria-label="Progress">
-        <li className={step === 'details' ? 'current' : 'done'}>1. Your details</li>
-        <li className={step === 'form' ? 'current' : ''}>2. Feedback</li>
+        <li className={step === 'role' ? 'current' : 'done'}>1. I am a…</li>
+        <li className={step === 'details' ? 'current' : step === 'form' ? 'done' : ''}>2. Your details</li>
+        <li className={step === 'form' ? 'current' : ''}>3. Feedback</li>
       </ol>
+
+      {step === 'role' && (
+        <section className="card">
+          <h2>Who is giving feedback?</h2>
+          <p className="muted">Choose your role to see the questions meant for you.</p>
+          <div className="role-grid">
+            {ROLES.map((r) => (
+              <button key={r.id} type="button" className={`role-card${role === r.id ? ' selected' : ''}`} onClick={() => chooseRole(r.id)}>
+                <span className="role-icon" aria-hidden="true">{r.id === 'teacher' ? '🧑‍🏫' : '🎓'}</span>
+                <span className="role-name">I am a {r.label}</span>
+                <span className="role-hint">{ROLE_HINTS[r.id]}</span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
 
       {step === 'details' && (
         <form className="card" onSubmit={goToForm} noValidate>
-          <h2>Your details</h2>
+          <div className="page-head">
+            <h2>Your details</h2>
+            <span className="muted small">Giving feedback as a <strong>{roleLabel(role)}</strong> · <button type="button" className="link-btn" onClick={() => setStep('role')}>Change</button></span>
+          </div>
           <Field label="Full name" required error={errors.fullName} htmlFor="fullName">
             <input id="fullName" className="input" autoComplete="name" maxLength={100} value={student.fullName} onChange={setStudentField('fullName')} />
           </Field>
@@ -167,10 +209,11 @@ export default function FeedbackPage() {
           <Field label="Email address" required error={errors.email} htmlFor="email">
             <input id="email" className="input" type="email" autoComplete="email" maxLength={254} value={student.email} onChange={setStudentField('email')} />
           </Field>
-          <Field label="College name" required error={errors.college} htmlFor="college">
+          <Field label={role === 'teacher' ? 'College / institution name' : 'College name'} required error={errors.college} htmlFor="college">
             <input id="college" className="input" maxLength={150} value={student.college} onChange={setStudentField('college')} />
           </Field>
-          <div className="actions">
+          <div className="actions space-between">
+            <button type="button" className="btn btn-secondary" onClick={() => setStep('role')}>Back</button>
             <button className="btn btn-primary" type="submit">Continue</button>
           </div>
         </form>
@@ -179,22 +222,22 @@ export default function FeedbackPage() {
       {step === 'form' && (
         <form onSubmit={submit} noValidate>
           {CATEGORIES.map((c) => {
-            const questions = form.questions.filter((q) => q.category === c.id);
-            const attributes = form.attributes.filter((a) => a.category === c.id);
-            if (!questions.length && !attributes.length) return null;
+            const sectionQuestions = questions.filter((q) => q.category === c.id);
+            const sectionAttributes = attributes.filter((a) => a.category === c.id);
+            if (!sectionQuestions.length && !sectionAttributes.length) return null;
             return (
               <section className="card" key={c.id}>
                 <h2>{c.label} feedback</h2>
-                {questions.map((q, i) => (
+                {sectionQuestions.map((q, i) => (
                   <Field key={q.id} label={`${i + 1}. ${q.text}`} required={q.required} error={errors[`q-${q.id}`]} htmlFor={`q-${q.id}`}>
                     <QuestionInput q={q} value={answers[q.id]} onChange={(v) => setAnswers({ ...answers, [q.id]: v })} />
                   </Field>
                 ))}
-                {attributes.length > 0 && (
+                {sectionAttributes.length > 0 && (
                   <div className="rating-group">
                     <h3>Rate the {c.label}</h3>
                     <p className="muted small">1 is the lowest rating; the highest number is the best.</p>
-                    {attributes.map((a) => (
+                    {sectionAttributes.map((a) => (
                       <Field key={a.id} label={`${a.name} (1–${a.scale})`} required={a.required} hint={a.description} error={errors[`a-${a.id}`]}>
                         <RatingInput scale={a.scale} value={ratings[a.id] || null} onChange={(v) => setRatings({ ...ratings, [a.id]: v })} />
                       </Field>
@@ -229,7 +272,10 @@ function Shell({ title, description, children }) {
     <div className="public-page">
       <header className="public-header">
         <div className="container">
-          <h1>{title || 'Student Feedback'}</h1>
+          <div className="public-header-row">
+            <h1>{title || 'Feedback'}</h1>
+            <ThemeToggle />
+          </div>
           {description && <p className="lead">{description}</p>}
         </div>
       </header>

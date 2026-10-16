@@ -18,13 +18,27 @@ function cleanCategory(value, fallback = DEFAULT_CATEGORY) {
   if (!CATEGORIES.includes(v)) throw new HttpError(400, `Category must be one of: ${CATEGORIES.join(', ')}.`);
   return v;
 }
+// Who a question/rating is for, and who submitted a feedback form.
+const ROLES = ['student', 'teacher'];
+const DEFAULT_ROLE = 'student';
+
+/** Role of a stored item; anything created before roles existed belongs to students. */
+const roleOf = (item) => (item && ROLES.includes(item.role) ? item.role : DEFAULT_ROLE);
+
+function cleanRole(value, fallback = DEFAULT_ROLE) {
+  if (value === undefined || value === null || value === '') return fallback;
+  const v = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (!ROLES.includes(v)) throw new HttpError(400, `Role must be one of: ${ROLES.join(', ')}.`);
+  return v;
+}
+
 const CHOICE_TYPES = ['single_choice', 'multiple_choice'];
 
 const byOrder = (a, b) => a.order - b.order;
 const sortedList = (name) => [...storage.get(name)].sort(byOrder);
 const activeSorted = (name) => sortedList(name).filter((item) => item.active !== false);
 
-function sanitizeQuestion(body, defaultCategory) {
+function sanitizeQuestion(body, defaults = {}) {
   const type = body.type;
   if (!QUESTION_TYPES.includes(type)) throw new HttpError(400, `Question type must be one of: ${QUESTION_TYPES.join(', ')}.`);
   let options = [];
@@ -44,7 +58,8 @@ function sanitizeQuestion(body, defaultCategory) {
   return {
     text: cleanString(body.text, 'Question text', { required: true, max: 300 }),
     type,
-    category: cleanCategory(body.category, defaultCategory),
+    category: cleanCategory(body.category, defaults.category),
+    role: cleanRole(body.role, defaults.role),
     options,
     required: cleanBool(body.required, false),
     active: cleanBool(body.active, true),
@@ -55,6 +70,7 @@ function sanitizeAttribute(body) {
   return {
     name: cleanString(body.name, 'Attribute name', { required: true, max: 100 }),
     category: cleanCategory(body.category),
+    role: cleanRole(body.role),
     description: cleanString(body.description, 'Description', { max: 300 }),
     scale: cleanInt(body.scale, 'Rating scale', { min: 2, max: 10, fallback: 5 }),
     required: cleanBool(body.required, true),
@@ -75,7 +91,7 @@ function sanitizePrize(body) {
 // Copies kept inside each winner record, so a winner stays complete even if the
 // original feedback submission is deleted later.
 function studentSnapshot(s) {
-  return s ? { fullName: s.fullName, email: s.email, mobile: s.mobile, college: s.college } : null;
+  return s ? { fullName: s.fullName, email: s.email, mobile: s.mobile, college: s.college, role: roleOf(s) } : null;
 }
 
 function feedbackSnapshot(sub) {
@@ -88,6 +104,10 @@ function winnerStudent(winner) {
 }
 
 module.exports = {
+  ROLES,
+  DEFAULT_ROLE,
+  roleOf,
+  cleanRole,
   CATEGORIES,
   DEFAULT_CATEGORY,
   categoryOf,

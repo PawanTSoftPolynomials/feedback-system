@@ -4,7 +4,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const storage = require('../lib/storage');
 const { HttpError } = require('../lib/http');
-const { activeSorted, categoryOf } = require('../lib/content');
+const { activeSorted, categoryOf, roleOf, cleanRole } = require('../lib/content');
 const { cleanString, cleanEmail, cleanMobile, truncate } = require('../lib/validate');
 
 const router = express.Router();
@@ -27,14 +27,14 @@ router.get('/form', (req, res) => {
     title: config.formTitle,
     description: config.formDescription,
     open: true,
-    questions: activeSorted('questions').map((q) => ({ id: q.id, text: q.text, type: q.type, options: q.options, required: q.required, category: categoryOf(q) })),
-    attributes: activeSorted('attributes').map((a) => ({ id: a.id, name: a.name, description: a.description, scale: a.scale, required: a.required, category: categoryOf(a) })),
+    questions: activeSorted('questions').map((q) => ({ id: q.id, text: q.text, type: q.type, options: q.options, required: q.required, category: categoryOf(q), role: roleOf(q) })),
+    attributes: activeSorted('attributes').map((a) => ({ id: a.id, name: a.name, description: a.description, scale: a.scale, required: a.required, category: categoryOf(a), role: roleOf(a) })),
   });
 });
 
-function buildAnswers(input) {
+function buildAnswers(input, role) {
   const answers = [];
-  for (const q of activeSorted('questions')) {
+  for (const q of activeSorted('questions').filter((x) => roleOf(x) === role)) {
     const raw = input[q.id];
     const label = `"${truncate(q.text)}"`;
     let value;
@@ -73,9 +73,9 @@ function buildAnswers(input) {
   return answers;
 }
 
-function buildRatings(input) {
+function buildRatings(input, role) {
   const ratings = [];
-  for (const a of activeSorted('attributes')) {
+  for (const a of activeSorted('attributes').filter((x) => roleOf(x) === role)) {
     const raw = input[a.id];
     const value = raw === undefined || raw === null || raw === '' ? null : Number(raw);
     if (value !== null && (!Number.isInteger(value) || value < 1 || value > a.scale)) {
@@ -90,6 +90,7 @@ function buildRatings(input) {
 router.post('/submissions', submitLimiter, async (req, res) => {
   if (!storage.getConfig().formOpen) throw new HttpError(403, 'The feedback form is currently closed.');
   const body = req.body || {};
+  const role = cleanRole(body.role);
   const s = body.student || {};
   const { mobile, key: mobileKey } = cleanMobile(s.mobile);
   const student = {
@@ -97,23 +98,24 @@ router.post('/submissions', submitLimiter, async (req, res) => {
     mobile,
     mobileKey,
     email: cleanEmail(s.email),
-    college: cleanString(s.college, 'College name', { required: true, min: 2, max: 150 }),
+    college: cleanString(s.college, role === 'teacher' ? 'College / institution name' : 'College name', { required: true, min: 2, max: 150 }),
+    role,
   };
-  const answers = buildAnswers(body.answers && typeof body.answers === 'object' ? body.answers : {});
-  const ratings = buildRatings(body.ratings && typeof body.ratings === 'object' ? body.ratings : {});
+  const answers = buildAnswers(body.answers && typeof body.answers === 'object' ? body.answers : {}, role);
+  const ratings = buildRatings(body.ratings && typeof body.ratings === 'object' ? body.ratings : {}, role);
   const comment = cleanString(body.comment, 'Your feedback', { max: 5000, multiline: true });
 
-  // The duplicate check runs inside the write lock, so two simultaneous submissions
-  // with the same email or mobile number cannot both get through.
+  // The duplicate check runs inside the write lock, so two simultaneous submissions with the
+  // same email or mobile number cannot both get through. Each person may submit once per role.
   await storage.transaction(['students', 'submissions'], (d) => {
-    const duplicate = d.students.find((x) => x.email === student.email || x.mobileKey === student.mobileKey);
+    const duplicate = d.students.find((x) => roleOf(x) === role && (x.email === student.email || x.mobileKey === student.mobileKey));
     if (duplicate) {
-      throw new HttpError(409, 'Feedback has already been submitted with this email address or mobile number. Thank you!');
+      throw new HttpError(409, `Feedback has already been submitted as a ${role} with this email address or mobile number. Thank you!`);
     }
     const now = new Date().toISOString();
     const studentId = crypto.randomUUID();
     const submissionId = crypto.randomUUID();
-    d.submissions.push({ id: submissionId, studentId, answers, ratings, comment, submittedAt: now });
+    d.submissions.push({ id: submissionId, studentId, role, answers, ratings, comment, submittedAt: now });
     d.students.push({ id: studentId, ...student, submissionId, createdAt: now });
   });
   res.status(201).json({ message: 'Thank you! Your feedback has been submitted successfully.' });

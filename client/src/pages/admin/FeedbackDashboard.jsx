@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { adminApi, formatDate } from '../../api.js';
 import { Alert, Badge, Checkbox, Loading, Pagination } from '../../components/ui.jsx';
-import { groupByCategory } from '../../categories.js';
+import { ROLES, groupByCategory, roleLabel } from '../../categories.js';
 
 function Summary({ refreshKey }) {
   const [summary, setSummary] = useState(null);
@@ -15,7 +15,11 @@ function Summary({ refreshKey }) {
   return (
     <>
       <div className="stats">
-        <div className="stat"><span className="stat-value">{summary.totalSubmissions}</span><span className="stat-label">Submissions</span></div>
+        <div className="stat">
+          <span className="stat-value">{summary.totalSubmissions}</span>
+          <span className="stat-label">Submissions</span>
+          {summary.byRole && <span className="stat-sub">{ROLES.map((r) => `${summary.byRole[r.id] || 0} ${r.plural.toLowerCase()}`).join(' · ')}</span>}
+        </div>
         <div className="stat"><span className="stat-value">{summary.withComments}</span><span className="stat-label">With personal comments</span></div>
         <div className="stat"><span className="stat-value">{summary.totalWinners}</span><span className="stat-label">Winners declared</span></div>
         <div className="stat"><span className="stat-value">{summary.prizesSelected}</span><span className="stat-label">Prizes selected</span></div>
@@ -23,9 +27,9 @@ function Summary({ refreshKey }) {
       {summary.attributes.length > 0 && (
         <section className="card">
           <h2>Rating averages</h2>
-          {groupByCategory(summary.attributes).map((group) => (
-            <div className="summary-group" key={group.id}>
-              <p className="section-label">{group.label}</p>
+          {ROLES.flatMap((r) => groupByCategory(summary.attributes.filter((a) => (a.role || 'student') === r.id)).map((group) => ({ ...group, role: r }))).map((group) => (
+            <div className="summary-group" key={`${group.role.id}-${group.id}`}>
+              <p className="section-label">{group.role.plural} · {group.label}</p>
               <div className="bars">
                 {group.items.map((a) => (
                   <div className="bar-row" key={a.attributeId}>
@@ -44,7 +48,7 @@ function Summary({ refreshKey }) {
 }
 
 export default function FeedbackDashboard() {
-  const [query, setQuery] = useState({ page: 1, search: '', filter: 'all' });
+  const [query, setQuery] = useState({ page: 1, search: '', filter: 'all', role: '' });
   const [searchInput, setSearchInput] = useState('');
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
@@ -55,7 +59,7 @@ export default function FeedbackDashboard() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   useEffect(() => {
-    const params = new URLSearchParams({ page: query.page, limit: 20, search: query.search, filter: query.filter });
+    const params = new URLSearchParams({ page: query.page, limit: 20, search: query.search, filter: query.filter, role: query.role });
     adminApi.get(`/admin/submissions?${params}`).then(setData).catch((err) => setError(err.message));
   }, [query, refreshKey]);
 
@@ -63,7 +67,7 @@ export default function FeedbackDashboard() {
   useEffect(() => {
     setSelected(new Set());
     setAllMatching(false);
-  }, [query.search, query.filter]);
+  }, [query.search, query.filter, query.role]);
 
   useEffect(() => {
     const t = setTimeout(() => setQuery((q) => (q.search === searchInput.trim() ? q : { ...q, page: 1, search: searchInput.trim() })), 300);
@@ -97,7 +101,7 @@ export default function FeedbackDashboard() {
   const selectAllMatching = async () => {
     setError('');
     try {
-      const params = new URLSearchParams({ search: query.search, filter: query.filter });
+      const params = new URLSearchParams({ search: query.search, filter: query.filter, role: query.role });
       const res = await adminApi.get(`/admin/submissions/ids?${params}`);
       setSelected(new Set(res.ids));
       setAllMatching(true);
@@ -139,6 +143,10 @@ export default function FeedbackDashboard() {
             <option value="all">All submissions</option>
             <option value="winners">Winners only</option>
             <option value="non-winners">Not winners</option>
+          </select>
+          <select className="input select-auto" value={query.role} onChange={(e) => setQuery({ ...query, page: 1, role: e.target.value })} aria-label="Role">
+            <option value="">Students and teachers</option>
+            {ROLES.map((r) => <option key={r.id} value={r.id}>{r.plural} only</option>)}
           </select>
         </div>
 
@@ -189,7 +197,7 @@ export default function FeedbackDashboard() {
                         />
                       </td>
                       <td>
-                        <strong>{row.student?.fullName}</strong> {row.isWinner && <Badge tone="success">Winner</Badge>}
+                        <strong>{row.student?.fullName}</strong> <Badge tone={row.role === 'teacher' ? 'info' : 'neutral'}>{roleLabel(row.role)}</Badge> {row.isWinner && <Badge tone="success">Winner</Badge>}
                         <div className="muted small">{row.student?.email}</div>
                       </td>
                       <td>{row.student?.college}</td>

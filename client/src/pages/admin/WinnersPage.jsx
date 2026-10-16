@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { adminApi, formatDate } from '../../api.js';
 import { Alert, Badge, Checkbox, Loading } from '../../components/ui.jsx';
+import { roleLabel } from '../../categories.js';
 
 export function EmailStatus({ status, error }) {
   if (status === 'sent') return <Badge tone="success">Email sent</Badge>;
@@ -139,7 +140,7 @@ export default function WinnersPage() {
                       <Checkbox aria-label={`Select ${w.student?.fullName || 'winner'}`} checked={selected.has(w.id)} onChange={() => toggleRow(w.id)} />
                     </td>
                     <td>
-                      <Link to={`/admin/winners/${w.id}`}><strong>{w.student?.fullName || 'Unknown'}</strong></Link>
+                      <Link to={`/admin/winners/${w.id}`}><strong>{w.student?.fullName || 'Unknown'}</strong></Link> <Badge tone={w.student?.role === 'teacher' ? 'info' : 'neutral'}>{roleLabel(w.student?.role)}</Badge>
                       <div className="muted small">{w.student?.email} · {w.student?.mobile}</div>
                       <div className="muted small">{w.student?.college}</div>
                     </td>

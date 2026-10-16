@@ -18,7 +18,7 @@ const crypto = require('crypto');
 const { PROJECT_ROOT } = require('./env');
 
 const DEFAULT_CONFIG = {
-  formTitle: 'Student Feedback',
+  formTitle: 'Feedback',
   formDescription: 'Tell us about your experience. It only takes a few minutes.',
   formOpen: true,
 };

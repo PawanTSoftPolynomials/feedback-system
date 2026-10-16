@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { adminApi, formatDate } from '../../api.js';
 import { Alert, Badge, Loading } from '../../components/ui.jsx';
 import FeedbackContent from '../../components/FeedbackContent.jsx';
+import { roleLabel } from '../../categories.js';
 import { EmailStatus } from './WinnersPage.jsx';
 
 export default function SubmissionDetail() {
@@ -62,8 +63,9 @@ export default function SubmissionDetail() {
 
       <div className="grid-2">
         <section className="card">
-          <h2>Student details</h2>
+          <h2>{roleLabel(sub.role)} details</h2>
           <dl className="details">
+            <dt>Role</dt><dd>{roleLabel(sub.role)}</dd>
             <dt>Email</dt><dd>{sub.student?.email}</dd>
             <dt>Mobile</dt><dd>{sub.student?.mobile}</dd>
             <dt>College</dt><dd>{sub.student?.college}</dd>

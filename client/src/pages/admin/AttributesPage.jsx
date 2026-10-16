@@ -2,12 +2,14 @@ import { useState } from 'react';
 import useOrderedList from '../../components/useOrderedList.js';
 import { Alert, Badge, Field, Loading } from '../../components/ui.jsx';
 import CategoryTabs from '../../components/CategoryTabs.jsx';
-import { CATEGORIES, categoryLabel } from '../../categories.js';
+import { CATEGORIES, ROLES, categoryLabel, roleLabel } from '../../categories.js';
+import RoleSwitch from '../../components/RoleSwitch.jsx';
 import OrderedList from './OrderedList.jsx';
 
-function AttributeEditor({ initial, defaultCategory, onSave, onCancel }) {
+function AttributeEditor({ initial, defaultCategory, defaultRole, onSave, onCancel }) {
   const [name, setName] = useState(initial?.name || '');
   const [category, setCategory] = useState(initial?.category || defaultCategory);
+  const [role, setRole] = useState(initial?.role || defaultRole);
   const [description, setDescription] = useState(initial?.description || '');
   const [scale, setScale] = useState(initial?.scale || 5);
   const [required, setRequired] = useState(initial ? initial.required : true);
@@ -18,7 +20,7 @@ function AttributeEditor({ initial, defaultCategory, onSave, onCancel }) {
     e.preventDefault();
     setBusy(true);
     try {
-      await onSave({ name, category, description, scale: Number(scale), required, active });
+      await onSave({ name, category, role, description, scale: Number(scale), required, active });
     } catch { /* error shown by parent */ } finally {
       setBusy(false);
     }
@@ -44,6 +46,11 @@ function AttributeEditor({ initial, defaultCategory, onSave, onCancel }) {
           </select>
         </Field>
       </div>
+      <Field label="Rating for" htmlFor="a-role">
+        <select id="a-role" className="input select-auto" value={role} onChange={(e) => setRole(e.target.value)}>
+          {ROLES.map((r) => <option key={r.id} value={r.id}>{r.plural}</option>)}
+        </select>
+      </Field>
       <div className="checks">
         <label className="choice"><input type="checkbox" checked={required} onChange={(e) => setRequired(e.target.checked)} /> Mandatory</label>
         <label className="choice"><input type="checkbox" checked={active} onChange={(e) => setActive(e.target.checked)} /> Show on the form</label>
@@ -59,19 +66,22 @@ function AttributeEditor({ initial, defaultCategory, onSave, onCancel }) {
 export default function AttributesPage() {
   const list = useOrderedList('attributes');
   const [category, setCategory] = useState(CATEGORIES[0].id);
+  const [role, setRole] = useState(ROLES[0].id);
   if (!list.items) return list.error ? <Alert>{list.error}</Alert> : <Loading />;
 
-  const visible = list.items.filter((a) => a.category === category);
+  const forRole = list.items.filter((a) => a.role === role);
+  const visible = forRole.filter((a) => a.category === category);
 
   return (
     <>
       <h1>Rating attributes</h1>
-      <p className="muted">Ratings are grouped into LMS and Course sections. Students rate each active attribute on its scale; averages appear on the Feedback dashboard.</p>
-      <CategoryTabs value={category} onChange={setCategory} items={list.items} />
+      <p className="muted">Students and teachers each get their own rating attributes, grouped into LMS and Course sections. Averages appear on the Feedback dashboard.</p>
+      <RoleSwitch value={role} onChange={setRole} items={list.items} />
+      <CategoryTabs value={category} onChange={setCategory} items={forRole} />
       <OrderedList
         list={list}
         items={visible}
-        noun={`${categoryLabel(category)} rating attribute`}
+        noun={`${categoryLabel(category)} rating for ${roleLabel(role).toLowerCase()}s`}
         renderItem={(a) => (
           <>
             <strong>{a.name}</strong>
@@ -83,7 +93,7 @@ export default function AttributesPage() {
             </div>
           </>
         )}
-        renderEditor={(item, onSave, onCancel) => <AttributeEditor initial={item} defaultCategory={category} onSave={onSave} onCancel={onCancel} />}
+        renderEditor={(item, onSave, onCancel) => <AttributeEditor initial={item} defaultCategory={category} defaultRole={role} onSave={onSave} onCancel={onCancel} />}
       />
     </>
   );
