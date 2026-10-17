@@ -10,7 +10,7 @@
     "dev": "node --watch-path=server server/index.js",
     "dev:client": "npm run dev --prefix client",
     "build": "npm install --prefix client --include=dev && npm run build --prefix client",
-    "test": "node --test server/test/api.test.js",
+    "test": "node --test server/test/api.test.js server/test/sync.test.js",
     "backup": "node server/scripts/backup.js",
     "restore": "node server/scripts/restore.js"
   },

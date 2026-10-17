@@ -41,6 +41,7 @@ const RESTORE_FILE = 'restore-pending.json';
 let dataDir = null;
 const cache = new Map();
 let queue = Promise.resolve();
+const writeListeners = [];
 
 function resolveDataDir() {
   return path.resolve(PROJECT_ROOT, process.env.DATA_DIR || './data');
@@ -134,7 +135,11 @@ async function ensureFile(name) {
   }
 }
 
-async function init() {
+/**
+ * Loads all collections. `beforeLoad({ dataDir, fileFor, ... })` runs after a staged restore and
+ * before missing files are created; it can fill in files from elsewhere (e.g. the GitHub backup).
+ */
+async function init({ beforeLoad } = {}) {
   dataDir = resolveDataDir();
   try {
     await fs.mkdir(dataDir, { recursive: true });
@@ -145,6 +150,9 @@ async function init() {
     );
   }
   await applyPendingRestore();
+  if (beforeLoad) {
+    await beforeLoad({ dataDir, names: COLLECTION_NAMES, fileFor, readJson, writeAtomic, hasValidShape });
+  }
   for (const name of COLLECTION_NAMES) {
     await ensureFile(name);
     let data;
@@ -200,6 +208,7 @@ function transaction(names, fn) {
       await writeAtomic(fileFor(name), drafts[name]);
       cache.set(name, drafts[name]);
     }
+    for (const listener of writeListeners) listener(names);
     return result;
   });
 }
@@ -215,12 +224,18 @@ function snapshot() {
   }));
 }
 
+/** Registers `listener(names)`, called after collections have been written successfully. */
+function onWrite(listener) {
+  writeListeners.push(listener);
+}
+
 function getConfig() {
   return { ...DEFAULT_CONFIG, ...get('config') };
 }
 
 module.exports = {
   init,
+  onWrite,
   get,
   getConfig,
   transaction,

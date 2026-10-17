@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { adminApi } from '../../api.js';
+import { adminApi, formatDate } from '../../api.js';
 import { Alert, Field, Loading } from '../../components/ui.jsx';
 
 export default function SettingsPage() {
@@ -7,9 +7,11 @@ export default function SettingsPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
+  const [sync, setSync] = useState(null);
 
   useEffect(() => {
     adminApi.get('/admin/config').then(setConfig).catch((err) => setError(err.message));
+    adminApi.get('/admin/sync-status').then(setSync).catch(() => {});
   }, []);
 
   const save = async (e) => {
@@ -67,6 +69,24 @@ export default function SettingsPage() {
           <button className="btn btn-primary" disabled={busy}>{busy ? 'Saving…' : 'Save settings'}</button>
         </div>
       </form>
+      <section className="card">
+        <h2>Automatic GitHub backup</h2>
+        {!sync ? <p className="muted">Checking…</p> : sync.enabled ? (
+          <>
+            <p>
+              Every change is saved to the private GitHub repository <strong>{sync.repo}</strong>
+              {sync.folder ? <> (folder <code>{sync.folder}</code>)</> : null} and restored from there when the server restarts.
+            </p>
+            <p className="muted small">
+              Last saved: {sync.lastSyncedAt ? formatDate(sync.lastSyncedAt) : 'no changes since the server started'}
+              {sync.pending > 0 && <> · <strong>{sync.pending} file(s) waiting to upload</strong></>}
+            </p>
+            {sync.lastError && <Alert>Last upload problem: {sync.lastError}. It is retried automatically.</Alert>}
+          </>
+        ) : (
+          <p className="muted">Not configured. Data is stored only on this server's disk. On hosting without a persistent disk (such as Render's free plan) it is lost on every restart; set <code>GITHUB_SYNC_REPO</code> and <code>GITHUB_SYNC_TOKEN</code> to turn on the GitHub backup.</p>
+        )}
+      </section>
       <section className="card">
         <h2>Data backup</h2>
         <p className="muted">Download a single JSON file containing all stored data (students, questions, ratings, submissions, prizes, winners and selections). Keep it somewhere safe; it contains personal information.</p>

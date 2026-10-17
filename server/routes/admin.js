@@ -8,6 +8,7 @@ const { login, requireAdmin } = require('../lib/auth');
 const { sortedList, sanitizeQuestion, sanitizeAttribute, sanitizePrize, studentSnapshot, feedbackSnapshot, categoryOf, cleanCategory, CATEGORIES, ROLES, roleOf, cleanRole } = require('../lib/content');
 const { cleanString, cleanBool, cleanId, cleanInt } = require('../lib/validate');
 const winnersRouter = require('./winners');
+const githubSync = require('../lib/githubSync');
 
 const router = express.Router();
 
@@ -290,6 +291,8 @@ router.get('/summary', (req, res) => {
 router.use('/winners', winnersRouter);
 
 // ---------- Backup ----------
+router.get('/sync-status', (req, res) => res.json(githubSync.activeStatus()));
+
 router.get('/backup', async (req, res) => {
   const bundle = await storage.snapshot();
   const name = `feedback-backup-${bundle.createdAt.replace(/[:.]/g, '-')}.json`;

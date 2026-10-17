@@ -124,6 +124,27 @@ Notes:
 - A service with a disk runs as a single instance and redeploys with a short downtime. That suits this app, which keeps its data in one process.
 - Restarts and redeploys never delete or reset data. Files are only created when they are missing.
 
+## Free hosting: automatic GitHub backup
+
+Render's free plan has no persistent disk. Files written there are thrown away whenever the service redeploys, restarts or **sleeps after 15 minutes without visitors**, which would erase every question, submission and winner. To keep the data on the free plan, turn on the GitHub backup:
+
+1. Create a **private** GitHub repository for the data (for example `feedback-system-data`).
+2. Create a **fine-grained personal access token** (GitHub → Settings → Developer settings → Fine-grained tokens):
+   - Repository access: **only** that data repository
+   - Permissions: **Contents: Read and write**
+3. On Render, set:
+   - `GITHUB_SYNC_REPO=<owner>/<repo>`
+   - `GITHUB_SYNC_TOKEN=<token>`
+   - `DATA_DIR=./data`
+
+How it works:
+
+- On startup, the server downloads the JSON files from `data/` in that repo before loading anything. If GitHub can't be reached, startup stops and Render retries, so an empty server never overwrites the backup.
+- After every change, the changed files are uploaded within about 2 seconds, one commit per file. When Render stops the service, it finishes pending uploads first.
+- **Admin → Settings → Automatic GitHub backup** shows when data was last saved and any upload problem.
+- The repo contains personal data (names, emails, mobile numbers) and the admin password hash. Keep it private.
+- Run only **one** server with the same repo and folder. A local copy should not use the same settings.
+
 ## Backups and restore
 
 **The Render Persistent Disk protects data across normal restarts and redeploys. It is not a backup.** Deleting the disk or service, a bad manual edit, an accidental restore, or an application bug can still lose data. Render's automatic daily disk snapshots help, but you should also keep your own copies, especially before and after collecting feedback.
