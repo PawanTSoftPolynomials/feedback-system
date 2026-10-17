@@ -5,6 +5,7 @@ const express = require('express');
 const helmet = require('helmet');
 const { PROJECT_ROOT } = require('./lib/env');
 const { errorHandler } = require('./lib/http');
+const storage = require('./lib/storage');
 
 function createApp() {
   const app = express();
@@ -15,6 +16,11 @@ function createApp() {
   app.use(express.json({ limit: '100kb' }));
 
   app.get('/api/health', (req, res) => res.json({ ok: true }));
+  // Database mode: pick up changes made by another server (e.g. local + Render) before answering.
+  app.use('/api', async (req, res, next) => {
+    await storage.refresh();
+    next();
+  });
   app.use('/api/portal', require('./routes/portal'));
   app.use('/api/admin', require('./routes/admin'));
   app.use('/api', require('./routes/public'));

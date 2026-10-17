@@ -18,6 +18,15 @@ const mail = require('../lib/mail');
 const { ensureAdmin } = require('../lib/auth');
 const { createApp } = require('../app');
 
+// Set by server/test/run-db-tests.js to run this whole suite against PostgreSQL.
+const USE_DB = Boolean(process.env.DATABASE_URL);
+const db = USE_DB ? require('../lib/db/prismaStore') : null;
+/** Reads what is actually persisted: the JSON file, or the database tables. */
+async function stored(name) {
+  if (USE_DB) return (await db.loadAll(db.client()))[name];
+  return JSON.parse(fs.readFileSync(path.join(dataDir, `${name}.json`), 'utf8'));
+}
+
 const sentEmails = [];
 let failEmail = false;
 mail.sendEmail = async (to, subject, html) => {
@@ -55,9 +64,9 @@ after(() => {
 let questionId;
 let attributeId;
 
-test('creates all JSON files and hashes the admin password', () => {
-  for (const name of storage.COLLECTION_NAMES) assert.ok(fs.existsSync(path.join(dataDir, `${name}.json`)), name);
-  const admin = JSON.parse(fs.readFileSync(path.join(dataDir, 'admin.json'), 'utf8'));
+test('creates storage and hashes the admin password', async () => {
+  if (!USE_DB) for (const name of storage.COLLECTION_NAMES) assert.ok(fs.existsSync(path.join(dataDir, `${name}.json`)), name);
+  const admin = await stored('admin');
   assert.ok(admin.passwordHash.startsWith('$2'));
   assert.ok(!JSON.stringify(admin).includes('test-password-123'));
 });
@@ -104,7 +113,7 @@ test('concurrent submissions are all saved without lost updates', async () => {
   // Same student submitting twice at the same time: exactly one succeeds.
   const race = await Promise.all([1, 2].map(() => call('POST', '/submissions', { student: student(500), answers: { [questionId]: 'A' }, ratings: { [attributeId]: 2 } })));
   assert.deepEqual(race.map((r) => r.status).sort(), [201, 409]);
-  const onDisk = JSON.parse(fs.readFileSync(path.join(dataDir, 'submissions.json'), 'utf8'));
+  const onDisk = (await stored('submissions'));
   assert.equal(onDisk.length, 27);
   const list = await call('GET', '/admin/submissions?page=1&limit=10&search=student 1', null, adminToken);
   assert.ok(list.body.total >= 1);
@@ -132,7 +141,7 @@ test('winner flow: email, portal verification, one selection only', async () => 
   const resent = await call('POST', `/admin/winners/${failed.body.id}/resend`, undefined, adminToken);
   assert.equal(resent.body.emailStatus, 'sent');
   const token = sentEmails.at(-1).html.match(/\/prize\/([\w-]+)/)[1];
-  assert.ok(!fs.readFileSync(path.join(dataDir, 'winners.json'), 'utf8').includes(token), 'raw token must not be stored');
+  assert.ok(!JSON.stringify(await stored('winners')).includes(token), 'raw token must not be stored');
 
   assert.equal((await call('POST', '/portal/session', { token: 'x'.repeat(43) })).status, 404);
   const session = await call('POST', '/portal/session', { token });
@@ -180,8 +189,8 @@ test('bulk delete removes feedback; winners keep their own stored copy', async (
   const after = await call('GET', '/admin/summary', undefined, adminToken);
   assert.equal(after.body.totalSubmissions, before.body.totalSubmissions - ids.length - 1);
   assert.equal(after.body.totalWinners, before.body.totalWinners);
-  const students = JSON.parse(fs.readFileSync(path.join(dataDir, 'students.json'), 'utf8'));
-  const submissions = JSON.parse(fs.readFileSync(path.join(dataDir, 'submissions.json'), 'utf8'));
+  const students = (await stored('students'));
+  const submissions = (await stored('submissions'));
   assert.equal(students.length, submissions.length);
 
   // The winner's separate record still has the student's details and feedback.
@@ -201,9 +210,9 @@ test('winners page: declared winners are stored separately and can be deleted', 
   const subs = (await call('GET', '/admin/submissions?filter=non-winners&limit=100', undefined, adminToken)).body.items;
   const declared = [];
   for (const sub of subs.slice(0, 2)) declared.push((await call('POST', '/admin/winners', { submissionId: sub.id }, adminToken)).body);
-  const stored = JSON.parse(fs.readFileSync(path.join(dataDir, 'winners.json'), 'utf8'));
+  const savedWinners = await stored('winners');
   for (const w of declared) {
-    const rec = stored.find((x) => x.id === w.id);
+    const rec = savedWinners.find((x) => x.id === w.id);
     assert.equal(rec.student.email, subs.find((s) => s.id === w.submissionId).student.email);
     assert.ok(Array.isArray(rec.feedback.answers));
   }
@@ -218,7 +227,7 @@ test('winners page: declared winners are stored separately and can be deleted', 
   assert.equal((await call('POST', '/portal/session', { token })).status, 404);
   const remaining = (await call('GET', '/admin/winners', undefined, adminToken)).body;
   assert.ok(remaining.every((w) => !declared.some((d) => d.id === w.id)));
-  assert.ok(!JSON.parse(fs.readFileSync(path.join(dataDir, 'selections.json'), 'utf8')).some((s) => declared.some((d) => d.id === s.winnerId)));
+  assert.ok(!(await stored('selections')).some((s) => declared.some((d) => d.id === s.winnerId)));
 
   // Single delete of the remaining winner (who also has a prize selected).
   assert.equal((await call('DELETE', `/admin/winners/${remaining[0].id}`, undefined, adminToken)).status, 204);
@@ -288,7 +297,7 @@ test('questions and ratings are split into LMS and Course sections', async () =>
   const answers = Object.fromEntries(form.body.questions.filter((x) => x.required).map((x) => [x.id, x.type === 'yes_no' ? 'yes' : x.type.endsWith('choice') ? x.options[0] : 'ok']));
   const ratings = Object.fromEntries(form.body.attributes.map((x) => [x.id, 3]));
   assert.equal((await call('POST', '/submissions', { student: student(900), answers, ratings })).status, 201);
-  const saved = JSON.parse(fs.readFileSync(path.join(dataDir, 'submissions.json'), 'utf8')).at(-1);
+  const saved = (await stored('submissions')).at(-1);
   assert.equal(saved.answers.find((x) => x.questionId === q.body.id).category, 'course');
   assert.equal(saved.ratings.find((x) => x.attributeId === a.body.id).category, 'course');
   const summary = await call('GET', '/admin/summary', undefined, adminToken);
@@ -319,7 +328,7 @@ test('teachers get their own questions, ratings and submissions', async () => {
   assert.equal(ok.status, 201);
   assert.equal((await call('POST', '/submissions', { role: 'teacher', student: teacher, answers: { [tq.body.id]: 'no' }, ratings: { [ta.body.id]: 2 } })).status, 409);
 
-  const saved = JSON.parse(fs.readFileSync(path.join(dataDir, 'submissions.json'), 'utf8')).at(-1);
+  const saved = (await stored('submissions')).at(-1);
   assert.equal(saved.role, 'teacher');
   assert.ok(saved.answers.every((a) => form.questions.find((q) => q.id === a.questionId).role === 'teacher'));
 
@@ -333,4 +342,41 @@ test('teachers get their own questions, ratings and submissions', async () => {
   // Declared teacher winners keep their role.
   const w = await call('POST', '/admin/winners', { submissionId: list.body.items[0].id }, adminToken);
   assert.equal(w.body.student.role, 'teacher');
+});
+
+test('database mode: everything reloaded from PostgreSQL matches what the app holds', { skip: !USE_DB }, async () => {
+  const persisted = await db.loadAll(db.client());
+  const plain = (v) => JSON.parse(JSON.stringify(v));
+  for (const name of storage.COLLECTION_NAMES) {
+    const inDb = plain(persisted[name]);
+    const inApp = plain(storage.get(name));
+    if (!Array.isArray(inApp)) {
+      assert.deepEqual(inDb, inApp, name);
+      continue;
+    }
+    // Row order may differ (the app always sorts for display); every row must match field by field.
+    assert.equal(inDb.length, inApp.length, `${name}: row count`);
+    const byId = new Map(inDb.map((row) => [row.id, row]));
+    for (const item of inApp) {
+      const row = byId.get(item.id);
+      assert.ok(row, `${name}: ${item.id} missing in database`);
+      for (const key of new Set([...Object.keys(item), ...Object.keys(row)])) {
+        assert.deepEqual(row[key] ?? null, item[key] ?? null, `${name}.${key} of ${item.id}`);
+      }
+    }
+  }
+});
+
+test('database mode: changes made by another server are picked up on the next request', { skip: !USE_DB }, async () => {
+  const other = db.client(); // stands in for a second server sharing the database
+  const now = new Date();
+  await other.question.create({ data: { id: 'from-other-server', text: 'Added by another server', type: 'yes_no', category: 'course', role: 'teacher', createdAt: now, updatedAt: now, order: 999 } });
+  await other.storageMeta.update({ where: { id: 1 }, data: { version: { increment: 1 } } });
+  const form = (await call('GET', '/form')).body;
+  assert.ok(form.questions.some((q) => q.id === 'from-other-server'));
+  // A write after that starts from the other server's data instead of overwriting it.
+  const created = await call('POST', '/admin/questions', { text: 'Written after the other server', type: 'yes_no' }, adminToken);
+  assert.equal(created.status, 201);
+  const ids = (await stored('questions')).map((q) => q.id);
+  assert.ok(ids.includes('from-other-server') && ids.includes(created.body.id));
 });

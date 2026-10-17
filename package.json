@@ -12,17 +12,28 @@
     "build": "npm install --prefix client --include=dev && npm run build --prefix client",
     "test": "node --test server/test/api.test.js server/test/sync.test.js",
     "backup": "node server/scripts/backup.js",
-    "restore": "node server/scripts/restore.js"
+    "restore": "node server/scripts/restore.js",
+    "test:db": "node server/test/run-db-tests.js",
+    "db:migrate": "prisma migrate deploy",
+    "db:studio": "prisma studio",
+    "postinstall": "prisma generate"
   },
   "engines": {
     "node": ">=20.12"
   },
   "dependencies": {
+    "@prisma/client": "^6.19.3",
     "axios": "^1.7.9",
     "bcryptjs": "^2.4.3",
     "express": "^5.1.0",
     "express-rate-limit": "^7.5.0",
     "helmet": "^8.0.0",
-    "jsonwebtoken": "^9.0.2"
+    "jsonwebtoken": "^9.0.2",
+    "prisma": "^6.19.3"
+  },
+  "allowScripts": {
+    "prisma@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "@prisma/client@6.19.3": true
   }
 }

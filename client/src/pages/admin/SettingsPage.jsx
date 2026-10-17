@@ -70,8 +70,10 @@ export default function SettingsPage() {
         </div>
       </form>
       <section className="card">
-        <h2>Automatic GitHub backup</h2>
-        {!sync ? <p className="muted">Checking…</p> : sync.enabled ? (
+        <h2>Data storage</h2>
+        {!sync ? <p className="muted">Checking…</p> : sync.storage === 'postgres' ? (
+          <p>All data is stored in the <strong>PostgreSQL database</strong>. It is kept across restarts and redeploys. Use the backup below for extra copies.</p>
+        ) : sync.enabled ? (
           <>
             <p>
               Every change is saved to the private GitHub repository <strong>{sync.repo}</strong>

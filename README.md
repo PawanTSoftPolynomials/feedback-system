@@ -4,7 +4,7 @@ A small feedback website with an admin dashboard, manual winner selection, Brevo
 
 - **Frontend:** React (Vite), in `client/`
 - **Backend:** Node.js and Express, in `server/`
-- **Storage:** JSON files in `DATA_DIR` (no database)
+- **Storage:** PostgreSQL through Prisma when `DATABASE_URL` is set, otherwise JSON files in `DATA_DIR`
 - **Email:** Brevo, using the same `BREVO_API_KEY` and `MAIL_FROM` variables as the Orange Tree LMS backend
 
 | URL | Who | What |
@@ -124,7 +124,35 @@ Notes:
 - A service with a disk runs as a single instance and redeploys with a short downtime. That suits this app, which keeps its data in one process.
 - Restarts and redeploys never delete or reset data. Files are only created when they are missing.
 
-## Free hosting: automatic GitHub backup
+## PostgreSQL database (Prisma)
+
+When `DATABASE_URL` is set, all data is stored in PostgreSQL. The tables are defined in [prisma/schema.prisma](prisma/schema.prisma), and the migrations are in `prisma/migrations`.
+
+| Table | Contents |
+| --- | --- |
+| `respondents` | Everyone who gave feedback (students and teachers); unique per role by email and by mobile number |
+| `questions`, `rating_attributes` | Questions and ratings, per role (`student`/`teacher`) and section (`lms`/`course`) |
+| `submissions` | Feedback forms, linked to the respondent; answers and ratings are kept as JSON copies |
+| `prizes`, `winners`, `prize_selections` | Prize options, declared winners (token stored only as a hash) and each winner's choice |
+| `app_settings`, `admin_accounts` | Form settings and the admin account (bcrypt hash), one row each |
+| `storage_meta` | A version number so several running servers stay in sync |
+
+How it works:
+
+- **Separate schema:** use `?schema=feedback` in the URL. The tables are created in their own PostgreSQL schema, so other applications in the same database (for example the LMS tables in `public`) are never read, changed or migrated.
+- **Migrations:** they run automatically when the server starts (`prisma migrate deploy`). You can also run them by hand with `npm run db:migrate`.
+- **Transactions:** every change is one database transaction. Writes take a PostgreSQL lock and re-check the latest data first, and every request picks up changes made by another server. So a local server and the Render server can safely share the same database.
+- **Commands:**
+  - `npm run backup`: exports the database to a JSON file.
+  - `npm run restore -- <file> --yes`: replaces the database contents with a backup. This also imports data from the old JSON files.
+  - `npm run db:studio`: opens Prisma Studio to browse the tables.
+- **Tests:** `npm run test:db` runs the whole API test suite against the database, in a temporary schema that is dropped afterwards.
+- **Render:**
+  - With a database, the service needs **no disk** and works on the free instance type.
+  - Set `DATABASE_URL` in the Environment tab. Render's *internal* database URL is faster if the web service is in the same region.
+  - A **free** Render PostgreSQL database expires 30 days after it was created; keep backups or upgrade it.
+
+## Free hosting without a database: automatic GitHub backup
 
 Render's free plan has no persistent disk. Files written there are thrown away whenever the service redeploys, restarts or **sleeps after 15 minutes without visitors**, which would erase every question, submission and winner. To keep the data on the free plan, turn on the GitHub backup:
 

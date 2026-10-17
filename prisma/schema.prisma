@@ -1,0 +1,174 @@
+// Feedback system database (PostgreSQL). Used when DATABASE_URL is set;
+// otherwise the app falls back to JSON files in DATA_DIR.
+// Apply changes with: npm run db:migrate (production) or see README.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+/// Everyone who submitted feedback: students and teachers.
+/// Each person can submit once per role (by email or mobile number).
+model Respondent {
+  id           String       @id
+  fullName     String       @map("full_name")
+  email        String
+  mobile       String
+  /// Last 10 digits of the mobile number, used for duplicate checks.
+  mobileKey    String       @map("mobile_key")
+  college      String
+  role         String       @default("student")
+  submissionId String?      @map("submission_id")
+  createdAt    DateTime     @map("created_at")
+  submissions  Submission[]
+
+  @@unique([role, email])
+  @@unique([role, mobileKey])
+  @@map("respondents")
+}
+
+/// Feedback questions created by the admin, per role (student/teacher) and section (lms/course).
+model Question {
+  id        String   @id
+  text      String
+  /// short_text | long_text | single_choice | multiple_choice | yes_no
+  type      String
+  category  String   @default("lms")
+  role      String   @default("student")
+  options   String[] @default([])
+  required  Boolean  @default(false)
+  active    Boolean  @default(true)
+  order     Int      @default(0) @map("sort_order")
+  createdAt DateTime @map("created_at")
+  updatedAt DateTime @map("updated_at")
+
+  @@index([role, category, order])
+  @@map("questions")
+}
+
+/// Rating attributes (e.g. Content Quality), per role and section.
+model RatingAttribute {
+  id          String   @id
+  name        String
+  description String   @default("")
+  category    String   @default("lms")
+  role        String   @default("student")
+  scale       Int      @default(5)
+  required    Boolean  @default(true)
+  active      Boolean  @default(true)
+  order       Int      @default(0) @map("sort_order")
+  createdAt   DateTime @map("created_at")
+  updatedAt   DateTime @map("updated_at")
+
+  @@index([role, category, order])
+  @@map("rating_attributes")
+}
+
+/// One submitted feedback form. Answers and ratings keep a copy of the question/attribute
+/// text at submission time, so editing or deleting a question never changes old feedback.
+model Submission {
+  id          String     @id
+  studentId   String     @map("respondent_id")
+  role        String     @default("student")
+  /// [{ questionId, question, type, category, answer }]
+  answers     Json       @default("[]")
+  /// [{ attributeId, name, scale, category, value }]
+  ratings     Json       @default("[]")
+  comment     String     @default("")
+  submittedAt DateTime   @map("submitted_at")
+  respondent  Respondent @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@index([studentId])
+  @@index([submittedAt])
+  @@map("submissions")
+}
+
+/// Prize options winners can choose from.
+model Prize {
+  id          String           @id
+  name        String
+  type        String           @default("")
+  description String           @default("")
+  value       String           @default("")
+  active      Boolean          @default(true)
+  order       Int              @default(0) @map("sort_order")
+  createdAt   DateTime         @map("created_at")
+  updatedAt   DateTime         @map("updated_at")
+  selections  PrizeSelection[]
+
+  @@map("prizes")
+}
+
+/// Declared winners. Keeps its own copy of the person's details and feedback,
+/// so deleting the original submission never removes a winner.
+model Winner {
+  id               String          @id
+  submissionId     String          @unique @map("submission_id")
+  studentId        String          @map("respondent_id")
+  student          Json?
+  feedback         Json?
+  declaredAt       DateTime        @map("declared_at")
+  /// SHA-256 of the prize-link token (the token itself is never stored).
+  tokenHash        String          @unique @map("token_hash")
+  tokenCreatedAt   DateTime        @map("token_created_at")
+  allowChange      Boolean         @default(false) @map("allow_change")
+  /// sending | sent | failed
+  emailStatus      String          @map("email_status")
+  emailRequestedAt DateTime?       @map("email_requested_at")
+  emailAttempts    Int             @default(0) @map("email_attempts")
+  emailError       String?         @map("email_error")
+  emailSentAt      DateTime?       @map("email_sent_at")
+  emailMessageId   String?         @map("email_message_id")
+  selection        PrizeSelection?
+
+  @@map("winners")
+}
+
+/// The prize a winner chose (one per winner). `history` lists earlier choices when a change was allowed.
+model PrizeSelection {
+  id         String   @id
+  winnerId   String   @unique @map("winner_id")
+  studentId  String   @map("respondent_id")
+  prizeId    String   @map("prize_id")
+  prizeName  String   @map("prize_name")
+  prizeType  String   @default("") @map("prize_type")
+  selectedAt DateTime @map("selected_at")
+  history    Json     @default("[]")
+  winner     Winner   @relation(fields: [winnerId], references: [id], onDelete: Cascade)
+  prize      Prize    @relation(fields: [prizeId], references: [id], onDelete: Restrict)
+
+  @@map("prize_selections")
+}
+
+/// Feedback form settings (single row, id = 1).
+model AppSettings {
+  id              Int     @id @default(1)
+  formTitle       String  @map("form_title")
+  formDescription String  @default("") @map("form_description")
+  formOpen        Boolean @default(true) @map("form_open")
+
+  @@map("app_settings")
+}
+
+/// The admin account (single row, id = 1). Only a bcrypt hash of the password is stored.
+model AdminAccount {
+  id                Int      @id @default(1)
+  username          String
+  passwordHash      String   @map("password_hash")
+  passwordChangedAt DateTime @map("password_changed_at")
+  createdAt         DateTime @map("created_at")
+
+  @@map("admin_accounts")
+}
+
+/// Bumped on every write, so each running server knows when to reload (single row, id = 1).
+model StorageMeta {
+  id      Int @id @default(1)
+  version Int @default(0)
+
+  @@map("storage_meta")
+}

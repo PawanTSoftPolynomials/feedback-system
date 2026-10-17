@@ -8,14 +8,19 @@ const { ensureAdmin, getSecret } = require('./lib/auth');
 const { isEmailConfigured } = require('./lib/mail');
 const { createApp } = require('./app');
 const githubSync = require('./lib/githubSync');
+const { runMigrations } = require('./lib/db/migrate');
 
 async function main() {
-  const sync = githubSync.fromEnv();
+  const useDatabase = Boolean(process.env.DATABASE_URL);
+  if (useDatabase) await runMigrations();
+  // The GitHub backup is only needed for JSON files without a persistent disk.
+  const sync = useDatabase ? null : githubSync.fromEnv();
+  if (useDatabase && process.env.GITHUB_SYNC_REPO) console.log('[sync] DATABASE_URL is set, so the GitHub file backup is not used.');
   await storage.init({ beforeLoad: sync ? sync.pull : undefined });
   if (sync) {
     sync.start(storage);
     githubSync.activate(sync);
-  } else if (process.env.RENDER && !process.env.DATA_DIR?.startsWith('/')) {
+  } else if (!useDatabase && process.env.RENDER && !process.env.DATA_DIR?.startsWith('/')) {
     console.warn('[storage] Running on Render without a persistent disk or GitHub backup: data will be lost on restart, redeploy and sleep.');
   }
   await ensureAdmin();
@@ -34,6 +39,7 @@ async function main() {
       const { pending } = sync.getStatus();
       console.log(pending ? `[sync] ${pending} file(s) could not be uploaded before shutdown` : '[sync] all changes saved to GitHub');
     }
+    await storage.close().catch(() => {});
     process.exit(0);
   };
   process.once('SIGTERM', () => shutdown('SIGTERM'));

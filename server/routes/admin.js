@@ -291,7 +291,7 @@ router.get('/summary', (req, res) => {
 router.use('/winners', winnersRouter);
 
 // ---------- Backup ----------
-router.get('/sync-status', (req, res) => res.json(githubSync.activeStatus()));
+router.get('/sync-status', (req, res) => res.json({ ...githubSync.activeStatus(), storage: storage.backend() }));
 
 router.get('/backup', async (req, res) => {
   const bundle = await storage.snapshot();

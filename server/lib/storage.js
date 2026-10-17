@@ -1,7 +1,9 @@
 'use strict';
 /**
- * Central JSON file storage.
+ * Central storage. Uses PostgreSQL (via Prisma, see lib/db/prismaStore.js) when DATABASE_URL is
+ * set, otherwise JSON files. Both keep the same in-memory data and the same API.
  *
+ * JSON file mode:
  * - Every collection lives in its own file inside DATA_DIR (process.env.DATA_DIR || "./data").
  * - Files are loaded once at startup and kept in memory; reads never touch the disk.
  * - All writes go through a single in-process queue, so concurrent requests can never
@@ -39,6 +41,7 @@ const BACKUP_FORMAT = 'orange-tree-feedback-backup';
 const RESTORE_FILE = 'restore-pending.json';
 
 let dataDir = null;
+let db = null; // lib/db/prismaStore when DATABASE_URL is set
 const cache = new Map();
 let queue = Promise.resolve();
 const writeListeners = [];
@@ -140,6 +143,20 @@ async function ensureFile(name) {
  * before missing files are created; it can fill in files from elsewhere (e.g. the GitHub backup).
  */
 async function init({ beforeLoad } = {}) {
+  if (process.env.DATABASE_URL) {
+    db = require('./db/prismaStore');
+    try {
+      await db.connect();
+      await db.loadInto(cache);
+    } catch (err) {
+      throw new Error(`Could not load data from the database: ${err.message}`);
+    }
+    dataDir = 'database';
+    const schema = /[?&]schema=([^&]+)/.exec(process.env.DATABASE_URL);
+    console.log(`[storage] PostgreSQL database (schema "${schema ? decodeURIComponent(schema[1]) : 'public'}")`);
+    return;
+  }
+  db = null;
   dataDir = resolveDataDir();
   try {
     await fs.mkdir(dataDir, { recursive: true });
@@ -197,6 +214,13 @@ function enqueue(task) {
 function transaction(names, fn) {
   ensureReady();
   names.forEach(assertKnown);
+  if (db) {
+    return enqueue(async () => {
+      const result = await db.transaction(names, fn, { cache, hasValidShape });
+      for (const listener of writeListeners) listener(names);
+      return result;
+    });
+  }
   return enqueue(async () => {
     const drafts = {};
     for (const name of names) drafts[name] = structuredClone(cache.get(name));
@@ -216,12 +240,34 @@ function transaction(names, fn) {
 /** A consistent copy of every collection, taken while no writes are in progress. */
 function snapshot() {
   ensureReady();
-  return enqueue(() => ({
-    format: BACKUP_FORMAT,
-    version: 1,
-    createdAt: new Date().toISOString(),
-    collections: Object.fromEntries(COLLECTION_NAMES.map((name) => [name, cache.get(name)])),
-  }));
+  return enqueue(async () => {
+    if (db) await db.refreshIfStale(cache);
+    return {
+      format: BACKUP_FORMAT,
+      version: 1,
+      createdAt: new Date().toISOString(),
+      collections: Object.fromEntries(COLLECTION_NAMES.map((name) => [name, cache.get(name)])),
+    };
+  });
+}
+
+/** Database mode: reloads if another server changed the data. JSON file mode: no-op. */
+function refresh() {
+  if (!db) return Promise.resolve();
+  return enqueue(() => db.refreshIfStale(cache));
+}
+
+/** Database mode: replaces stored collections with those from a backup bundle. */
+function replaceAll(collections) {
+  ensureReady();
+  if (!db) throw new Error('replaceAll is only available in database mode');
+  return enqueue(() => db.replaceAll(collections, { cache, hasValidShape }));
+}
+
+const backend = () => (db ? 'postgres' : 'files');
+
+async function close() {
+  if (db) await db.disconnect();
 }
 
 /** Registers `listener(names)`, called after collections have been written successfully. */
@@ -236,6 +282,10 @@ function getConfig() {
 module.exports = {
   init,
   onWrite,
+  refresh,
+  replaceAll,
+  backend,
+  close,
   get,
   getConfig,
   transaction,
