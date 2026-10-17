@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { adminApi } from '../api.js';
+import { useLiveRefresh } from '../live.js';
 
 /** Load / create / update / delete / reorder for an admin-managed ordered list. */
 export default function useOrderedList(resource) {
@@ -11,6 +12,7 @@ export default function useOrderedList(resource) {
   }, [resource]);
 
   useEffect(reload, [reload]);
+  useLiveRefresh(reload);
 
   const run = async (fn) => {
     setError('');

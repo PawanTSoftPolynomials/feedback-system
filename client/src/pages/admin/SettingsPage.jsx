@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { adminApi, formatDate } from '../../api.js';
 import { Alert, Field, Loading } from '../../components/ui.jsx';
+import { useLiveRefresh } from '../../live.js';
 
 export default function SettingsPage() {
   const [config, setConfig] = useState(null);
@@ -13,6 +14,7 @@ export default function SettingsPage() {
     adminApi.get('/admin/config').then(setConfig).catch((err) => setError(err.message));
     adminApi.get('/admin/sync-status').then(setSync).catch(() => {});
   }, []);
+  useLiveRefresh(() => adminApi.get('/admin/sync-status').then(setSync).catch(() => {}));
 
   const save = async (e) => {
     e.preventDefault();

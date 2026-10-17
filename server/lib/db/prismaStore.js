@@ -153,4 +153,6 @@ async function replaceAll(collections, { cache, hasValidShape }) {
   if (cache) await loadInto(cache);
 }
 
-module.exports = { connect, disconnect, loadInto, refreshIfStale, transaction, replaceAll, loadAll, client: () => prisma };
+const currentVersion = () => loadedVersion;
+
+module.exports = { currentVersion, connect, disconnect, loadInto, refreshIfStale, transaction, replaceAll, loadAll, client: () => prisma };

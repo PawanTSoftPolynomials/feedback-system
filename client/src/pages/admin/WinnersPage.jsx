@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { adminApi, formatDate } from '../../api.js';
 import { Alert, Badge, Checkbox, Loading } from '../../components/ui.jsx';
 import { roleLabel } from '../../categories.js';
+import { useLiveRefresh } from '../../live.js';
 
 export function EmailStatus({ status, error }) {
   if (status === 'sent') return <Badge tone="success">Email sent</Badge>;
@@ -37,6 +38,14 @@ export default function WinnersPage() {
     setSelected(new Set());
     adminApi.get(`/admin/winners?filter=${filter}`).then(setRows).catch((err) => setError(err.message));
   }, [filter]);
+
+  // Email results and prize choices update by themselves; ticked rows stay ticked.
+  useLiveRefresh(() => {
+    adminApi.get(`/admin/winners?filter=${filter}`).then((list) => {
+      setRows(list);
+      setSelected((prev) => new Set([...prev].filter((id) => list.some((w) => w.id === id))));
+    }).catch(() => {});
+  });
 
   const act = async (id, fn) => {
     setBusyId(id);

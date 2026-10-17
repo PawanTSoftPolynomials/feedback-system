@@ -11,9 +11,12 @@ import WinnersPage from './pages/admin/WinnersPage.jsx';
 import WinnerDetail from './pages/admin/WinnerDetail.jsx';
 import PrizesPage from './pages/admin/PrizesPage.jsx';
 import SettingsPage from './pages/admin/SettingsPage.jsx';
+import UpdateBanner from './components/UpdateBanner.jsx';
 
 export default function App() {
   return (
+    <>
+    <UpdateBanner />
     <Routes>
       <Route path="/" element={<FeedbackPage />} />
       <Route path="/prize/:token" element={<PrizePortal />} />
@@ -31,5 +34,6 @@ export default function App() {
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </>
   );
 }

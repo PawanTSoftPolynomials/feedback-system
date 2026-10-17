@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { adminApi, formatDate } from '../../api.js';
 import { Alert, Badge, Checkbox, Loading, Pagination } from '../../components/ui.jsx';
 import { ROLES, groupByCategory, roleLabel } from '../../categories.js';
+import { useLiveRefresh } from '../../live.js';
 
 function Summary({ refreshKey }) {
   const [summary, setSummary] = useState(null);
@@ -57,6 +58,8 @@ export default function FeedbackDashboard() {
   const [deleting, setDeleting] = useState(false);
   const [allMatching, setAllMatching] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  // New submissions, winners and deletions show up by themselves; page, filters and selection are kept.
+  useLiveRefresh(() => setRefreshKey((k) => k + 1));
 
   useEffect(() => {
     const params = new URLSearchParams({ page: query.page, limit: 20, search: query.search, filter: query.filter, role: query.role });

@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { api, formatDate } from '../api.js';
 import { Alert, Loading } from '../components/ui.jsx';
 import ThemeToggle from '../components/ThemeToggle.jsx';
+import { useLiveRefresh } from '../live.js';
 
 export default function PrizePortal() {
   const { token } = useParams();
@@ -20,6 +21,11 @@ export default function PrizePortal() {
       .then(setView)
       .catch((err) => setError(err.message));
   }, [token]);
+
+  useLiveRefresh(() => {
+    if (error || saving || confirming) return;
+    api.post('/portal/session', { token }).then(setView).catch(() => {});
+  });
 
   const confirm = async () => {
     setSaving(true);

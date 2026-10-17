@@ -380,3 +380,13 @@ test('database mode: changes made by another server are picked up on the next re
   const ids = (await stored('questions')).map((q) => q.id);
   assert.ok(ids.includes('from-other-server') && ids.includes(created.body.id));
 });
+
+test('live endpoint: version changes on every save and stays the same otherwise', async () => {
+  const first = (await call('GET', '/live')).body;
+  assert.ok(first.version && first.build);
+  assert.equal((await call('GET', '/live')).body.version, first.version, 'no change without a save');
+  await call('POST', '/admin/prizes', { name: `Live check ${Date.now()}` }, adminToken);
+  const after = (await call('GET', '/live')).body;
+  assert.notEqual(after.version, first.version);
+  assert.equal(after.build, first.build);
+});

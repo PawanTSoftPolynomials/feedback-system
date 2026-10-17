@@ -5,6 +5,7 @@ import { Alert, Badge, Loading } from '../../components/ui.jsx';
 import FeedbackContent from '../../components/FeedbackContent.jsx';
 import { roleLabel } from '../../categories.js';
 import { EmailStatus, deleteWinnersMessage } from './WinnersPage.jsx';
+import { useLiveRefresh } from '../../live.js';
 
 /** A single winner's stored record: details, email status, prize choice and feedback. */
 export default function WinnerDetail() {
@@ -18,6 +19,10 @@ export default function WinnerDetail() {
   useEffect(() => {
     adminApi.get(`/admin/winners/${id}`).then(setWinner).catch((err) => setError(err.message));
   }, [id]);
+
+  useLiveRefresh(() => {
+    if (!busy) adminApi.get(`/admin/winners/${id}`).then(setWinner).catch(() => {});
+  });
 
   const act = async (fn) => {
     setBusy(true);

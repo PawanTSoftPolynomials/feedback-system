@@ -199,6 +199,12 @@ Anything submitted between taking the backup and restoring it is replaced, so re
 - **Forgot the password:** set `ADMIN_PASSWORD=<new>` and `ADMIN_RESET_PASSWORD=true`, restart, log in, then remove both variables. Changing the password ends all existing admin sessions.
 - Login is rate-limited to 10 attempts per 15 minutes per IP address.
 
+## Live updates (no manual refresh)
+
+Open pages stay up to date by themselves. The server keeps a data version that changes on every save, including saves made by another server sharing the database. Each open page checks `GET /api/live` every 5 seconds and whenever the tab becomes visible again. When the version changes, the page quietly reloads its data, keeping the current page, filters, selections and anything already typed. The admin Settings form is never overwritten while you edit it.
+
+When a new version of the site is deployed, open pages show **"A new version of this site is available — Reload now"**. Tabs in the background reload by themselves.
+
 ## Students and teachers
 
 The feedback form starts with **I am a Student / I am a Teacher**, and each role sees only the questions and ratings created for it. On the admin Questions and Rating attributes pages, a **For Students / For Teachers** switch selects which set you are editing, and each set has its own LMS and Course tabs. Each person can submit once per role. The Feedback dashboard can be filtered by role, and rating averages are shown per role. Questions, ratings and submissions created before roles existed count as student ones.

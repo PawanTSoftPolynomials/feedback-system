@@ -5,6 +5,7 @@ const express = require('express');
 const helmet = require('helmet');
 const { PROJECT_ROOT } = require('./lib/env');
 const { errorHandler } = require('./lib/http');
+const crypto = require('crypto');
 const storage = require('./lib/storage');
 
 function createApp() {
@@ -21,13 +22,21 @@ function createApp() {
     await storage.refresh();
     next();
   });
+
+  // Polled by every open page: `version` changes when data changes, `build` when a new frontend is deployed.
+  const dist = path.join(PROJECT_ROOT, 'client', 'dist');
+  const indexFile = path.join(dist, 'index.html');
+  const build = fs.existsSync(indexFile) ? crypto.createHash('sha1').update(fs.readFileSync(indexFile)).digest('hex').slice(0, 12) : 'dev';
+  app.get('/api/live', (req, res) => {
+    res.set('Cache-Control', 'no-store');
+    res.json({ version: storage.dataVersion(), build });
+  });
   app.use('/api/portal', require('./routes/portal'));
   app.use('/api/admin', require('./routes/admin'));
   app.use('/api', require('./routes/public'));
   app.use('/api', (req, res) => res.status(404).json({ error: 'Not found.' }));
 
   // Only the built React app is served statically. The data directory is never exposed.
-  const dist = path.join(PROJECT_ROOT, 'client', 'dist');
   if (fs.existsSync(path.join(dist, 'index.html'))) {
     app.use(express.static(dist, { index: false, maxAge: '7d' }));
     app.use((req, res, next) => {

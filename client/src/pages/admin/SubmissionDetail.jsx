@@ -5,6 +5,7 @@ import { Alert, Badge, Loading } from '../../components/ui.jsx';
 import FeedbackContent from '../../components/FeedbackContent.jsx';
 import { roleLabel } from '../../categories.js';
 import { EmailStatus } from './WinnersPage.jsx';
+import { useLiveRefresh } from '../../live.js';
 
 export default function SubmissionDetail() {
   const { id } = useParams();
@@ -16,6 +17,7 @@ export default function SubmissionDetail() {
 
   const load = () => adminApi.get(`/admin/submissions/${id}`).then(setSub).catch((err) => setError(err.message));
   useEffect(() => { load(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useLiveRefresh(() => { if (!busy) load(); });
 
   const declareWinner = async () => {
     if (!window.confirm(`Declare ${sub.student?.fullName} as a winner? A prize-selection email will be sent to ${sub.student?.email}.`)) return;

@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { Alert, Field, Loading, RatingInput } from '../components/ui.jsx';
 import { CATEGORIES, ROLES, roleLabel } from '../categories.js';
 import ThemeToggle from '../components/ThemeToggle.jsx';
+import { useLiveRefresh } from '../live.js';
 
 const ROLE_HINTS = {
   student: 'I am studying a course and want to share my experience.',
@@ -91,6 +92,12 @@ export default function FeedbackPage() {
       })
       .catch((err) => setLoadError(err.message));
   }, []);
+
+  // Questions/ratings changed by the admin appear without a refresh; answers already given are kept.
+  useLiveRefresh(() => {
+    if (step === 'done' || submitting) return;
+    api.get('/form').then(setForm).catch(() => {});
+  });
 
   const scrollToFirstError = () => {
     setTimeout(() => document.querySelector('.has-error')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 0);

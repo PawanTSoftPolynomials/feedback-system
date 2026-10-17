@@ -314,3 +314,6 @@ h3 { font-size: 1rem; margin: 0 0 8px; }
 .segmented button.active .tab-count { background: rgba(255, 255, 255, 0.25); color: var(--on-primary); }
 
 .stat-sub { color: var(--muted); font-size: 0.8rem; margin-top: 2px; }
+
+/* "New version available" banner */
+.update-banner { position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 50; display: flex; align-items: center; gap: 12px; max-width: calc(100% - 32px); padding: 10px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); color: var(--text); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18); }

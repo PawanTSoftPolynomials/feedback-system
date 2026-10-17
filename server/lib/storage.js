@@ -42,6 +42,9 @@ const RESTORE_FILE = 'restore-pending.json';
 
 let dataDir = null;
 let db = null; // lib/db/prismaStore when DATABASE_URL is set
+// Changes on every save; pages poll it (GET /api/live) to know when to reload their data.
+const bootId = crypto.randomBytes(4).toString('hex');
+let localVersion = 0;
 const cache = new Map();
 let queue = Promise.resolve();
 const writeListeners = [];
@@ -217,6 +220,7 @@ function transaction(names, fn) {
   if (db) {
     return enqueue(async () => {
       const result = await db.transaction(names, fn, { cache, hasValidShape });
+      localVersion += 1;
       for (const listener of writeListeners) listener(names);
       return result;
     });
@@ -232,6 +236,7 @@ function transaction(names, fn) {
       await writeAtomic(fileFor(name), drafts[name]);
       cache.set(name, drafts[name]);
     }
+    localVersion += 1;
     for (const listener of writeListeners) listener(names);
     return result;
   });
@@ -266,6 +271,9 @@ function replaceAll(collections) {
 
 const backend = () => (db ? 'postgres' : 'files');
 
+/** A value that changes whenever stored data changes (in database mode, also by other servers). */
+const dataVersion = () => (db ? `db-${db.currentVersion()}` : `${bootId}-${localVersion}`);
+
 async function close() {
   if (db) await db.disconnect();
 }
@@ -285,6 +293,7 @@ module.exports = {
   refresh,
   replaceAll,
   backend,
+  dataVersion,
   close,
   get,
   getConfig,
