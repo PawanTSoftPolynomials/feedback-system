@@ -10,13 +10,30 @@ const { createApp } = require('./app');
 const githubSync = require('./lib/githubSync');
 const { runMigrations } = require('./lib/db/migrate');
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Retries a startup step while the database is unreachable (e.g. slow network or a waking database). */
+async function withDatabaseRetry(label, step, attempts = 5) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await step();
+    } catch (err) {
+      const unreachable = /P1001|P1002|P1017|Can't reach database|ECONNRESET|ETIMEDOUT|timed out/i.test(err.message);
+      if (!unreachable || attempt >= attempts) throw err;
+      const wait = attempt * 5000;
+      console.warn(`[db] ${label}: database not reachable (attempt ${attempt}/${attempts}), retrying in ${wait / 1000}s`);
+      await sleep(wait);
+    }
+  }
+}
+
 async function main() {
   const useDatabase = Boolean(process.env.DATABASE_URL);
-  if (useDatabase) await runMigrations();
+  if (useDatabase) await withDatabaseRetry('migrations', runMigrations);
   // The GitHub backup is only needed for JSON files without a persistent disk.
   const sync = useDatabase ? null : githubSync.fromEnv();
   if (useDatabase && process.env.GITHUB_SYNC_REPO) console.log('[sync] DATABASE_URL is set, so the GitHub file backup is not used.');
-  await storage.init({ beforeLoad: sync ? sync.pull : undefined });
+  await withDatabaseRetry('loading data', () => storage.init({ beforeLoad: sync ? sync.pull : undefined }), useDatabase ? 5 : 1);
   if (sync) {
     sync.start(storage);
     githubSync.activate(sync);
